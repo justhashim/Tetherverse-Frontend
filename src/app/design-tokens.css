@@ -29,6 +29,13 @@
    anything the player causes. `rift` violet is the multiverse: nebulae, rifts,
    the abyss. A screen showing both is showing the two halves of the game.
 
+   Cyan is also the one control the player must not miss, which is why the
+   call to action is the only cyan thing on the menu. The rule is not "cyan is
+   rare", it is "cyan means the player". A halo around a logo, a flare along a
+   panel edge, a gradient behind a title and a dot that pings forever are none
+   of those things, and they are how the menu ended up looking like an
+   instrument panel instead of a place.
+
    Amber belongs to coins and risk, and rose to failure. Those are semantic, not
    brand, so they are allowed to appear only where they mean something. */
 :root {
@@ -46,6 +53,18 @@
   --radius-control: 0.5rem;   /* buttons, inputs: 8px  */
   --radius-panel: 1rem;       /* cards, panels, HUD: 16px  */
   --radius-chip: 9999px;      /* status chips, pips: full  */
+
+  /* ==========================================================================
+     Legibility over the world
+     ==========================================================================
+     A panel keeps its text legible by being opaque. An unframed readout has
+     nothing to hide behind, so it has to carry its own contrast: a tight
+     shadow under the glyphs and a wide soft one behind them. Enough to hold a
+     number steady over a bright nebula, not enough to read as a glow.
+
+     This is the price of taking the chrome out of the chrome's boxes, and it
+     is the only shadow the game is allowed to lean on. */
+  --shadow-readout: 0 1px 2px rgba(2, 4, 8, 0.92), 0 0 20px rgba(2, 4, 8, 0.68);
 
   /* ==========================================================================
      Layers. The whole vocabulary.
@@ -85,11 +104,43 @@
    ============================================================================
    The game is keyboard-first: hold space to tether, release to launch, escape to
    abort. A focus ring that is invisible here is not a minor accessibility gap,
-   it is a gap in the primary control scheme. */
+   it is a gap in the primary control scheme.
+
+   The ring is an `outline` and not a box-shadow because an outline takes up no
+   space: a control that gains a ring must not shove the things around it. */
+:root {
+  --focus-width: 2px;
+  --focus-offset: 2px;
+
+  /* A ring has to contrast with the thing it rings. The one control in the
+     product whose fill is the signal colour cannot also carry a signal ring,
+     or the two merge into one blob and the control stops reading as a
+     control. That one takes the ink ring instead, which is why this is a
+     token and not a hard-coded colour. */
+  --focus-ink: var(--foreground);
+}
+
 :focus-visible {
-  outline: 2px solid var(--signal);
-  outline-offset: 2px;
-  border-radius: var(--radius-control);
+  outline: var(--focus-width) solid var(--signal);
+  outline-offset: var(--focus-offset);
+}
+
+/* The ring used to set `border-radius: var(--radius-control)` here, on the
+   element being focused. That rule is unlayered, so it outranked every radius
+   utility in the game: the moment a round control took the keyboard focus it
+   was squared off, and the ring drew a rectangle around a circle. The ring now
+   follows whatever radius the control already has, because that radius is the
+   one that describes the control. */
+
+/* A circular control keeps a circular ring, for the controls that are round in
+   shape but not in class. */
+.focus-round:focus-visible {
+  border-radius: var(--radius-chip);
+}
+
+/* The ink ring, for the control whose fill is the signal colour. */
+.focus-ink:focus-visible {
+  outline-color: var(--focus-ink);
 }
 
 /* Remove the ring for pointer users, who get hover and active feedback instead.

@@ -1,7 +1,6 @@
-// src/components/leaderboard/LeaderboardPanel.tsx
 'use client';
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { LeaderboardPlayer } from "@/src/types/game";
 import LeaderboardEntry from "./LeaderBoardEntry";
@@ -25,6 +24,20 @@ export default function LeaderboardPanel({ onClose, currentUserId }: Leaderboard
     const [leaders, setLeaders] = useState<LeaderboardPlayer[]>([]);
     const [loading, setLoading] = useState<boolean>(true);
     const [error, setError] = useState<LoadError>(null);
+    const closeRef = useRef<HTMLButtonElement>(null);
+
+    /**
+     * A modal that takes the keyboard has to give it back.
+     *
+     * The menu's call to action is focused underneath this panel, and without
+     * this the player who opens the leaderboard is still holding a focused
+     * button they cannot see. Focus lands on the close control instead, which
+     * is where Escape would take them anyway.
+     */
+    useEffect(() => {
+        const frame = requestAnimationFrame(() => closeRef.current?.focus());
+        return () => cancelAnimationFrame(frame);
+    }, []);
 
     useEffect(() => {
         // Guards against setting state after the panel closes mid-flight, which
@@ -89,11 +102,11 @@ export default function LeaderboardPanel({ onClose, currentUserId }: Leaderboard
                     exit={{ opacity: 0, y: 20, scale: 0.95 }}
                     transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
                     onClick={(e) => e.stopPropagation()}
-                    className="relative w-full max-w-xl h-[82vh] bg-slate-900/80 border border-violet-500/30 rounded-[var(--radius-panel)] flex flex-col shadow-[0_0_60px_rgba(139,92,246,0.15)] overflow-hidden"
+                    role="dialog"
+                    aria-modal="true"
+                    aria-label="Leaderboard"
+                    className="relative w-full max-w-xl h-[82vh] bg-slate-900/85 border border-zinc-800 rounded-[var(--radius-panel)] flex flex-col shadow-2xl overflow-hidden"
                 >
-                    {/* Holographic Border Flare */}
-                    <div className="absolute top-0 inset-x-0 h-0.5 bg-linear-to-r from-transparent via-cyan-400 to-transparent shadow-[0_0_15px_rgba(34,211,238,0.8)]" />
-
                     {/* Header */}
                     <div className="p-5 md:p-6 border-b border-slate-800/80 flex justify-between items-center bg-slate-950/50">
                         <div>
@@ -109,6 +122,7 @@ export default function LeaderboardPanel({ onClose, currentUserId }: Leaderboard
                             </p>
                         </div>
                         <button
+                            ref={closeRef}
                             onClick={onClose}
                             className="flex items-center gap-1.5 font-mono text-xs border border-zinc-800 hover:border-zinc-700 px-3 py-1.5 rounded-[var(--radius-control)] bg-zinc-900/90 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 transition-colors duration-150 active:scale-[0.98] shadow-sm cursor-pointer select-none"
                         >
