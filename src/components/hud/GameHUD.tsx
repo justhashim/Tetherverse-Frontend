@@ -87,12 +87,12 @@ export default function GameHUD({ onAbort }: GameHUDProps) {
                 */}
                 <button
                     onClick={onAbort}
-                    className="pointer-events-auto group flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.2em] text-zinc-500 hover:text-rose-300 transition-colors duration-150 cursor-pointer select-none"
+                    className="pointer-events-auto group flex items-center gap-2 font-mono text-xs uppercase tracking-[0.2em] text-zinc-500 hover:text-rose-300 transition-[color] duration-150 cursor-pointer select-none"
                     aria-label="Abort Current Ascent"
                 >
                     <span className="text-sm leading-none text-zinc-600 group-hover:text-rose-400 group-hover:-translate-x-0.5 transition-all duration-150">←</span>
                     <span className="text-readout">Abort</span>
-                    <span className="text-[9px] tracking-[0.15em] text-zinc-600 border border-white/10 rounded-[3px] px-1 py-px group-hover:border-rose-500/30 group-hover:text-rose-400/80">
+                    <span className="text-[10px] tracking-[0.15em] text-zinc-600 border border-white/10 rounded-[3px] px-1 py-px group-hover:border-rose-500/30 group-hover:text-rose-400/80">
                         ESC
                     </span>
                 </button>
@@ -112,8 +112,8 @@ export default function GameHUD({ onAbort }: GameHUDProps) {
                 <div className="flex flex-col items-end gap-1.5">
                     {/* The band. A dot and a word. */}
                     <div className="flex items-center gap-2">
-                        <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${getZoneDot(zone)}`} />
-                        <span className="font-mono text-[10px] font-bold uppercase tracking-[0.3em] text-zinc-400 text-readout">
+                        <span className={`h-[7px] w-[7px] rounded-full shrink-0 ${getZoneDot(zone)}`} />
+                        <span className="font-mono text-[11px] font-bold uppercase tracking-[0.3em] text-zinc-400 text-readout">
                             {zone}
                         </span>
                     </div>
@@ -121,12 +121,18 @@ export default function GameHUD({ onAbort }: GameHUDProps) {
                     {/* The value. Big, tabular, and the brightest thing on the
                         screen: the altitude is the player's own live presence,
                         so it wears the signal colour. The label beside it is
-                        dimmer than the number by an order of magnitude. */}
+                        dimmer than the number by an order of magnitude.
+
+                        Sixty pixels, not seventy-two. On a 1440-wide desktop the
+                        readout used to be the size of a headline, and it was
+                        fighting the world behind it for attention it does not
+                        need: it is a number in the corner of a room, read at a
+                        glance, not a title. */}
                     <div className="flex items-baseline gap-2">
-                        <span className="font-mono text-[10px] font-bold uppercase tracking-[0.3em] text-zinc-500 text-readout">
+                        <span className="font-mono text-[11px] font-bold uppercase tracking-[0.3em] text-zinc-500 text-readout">
                             Alt
                         </span>
-                        <span className="font-mono font-black text-6xl md:text-7xl leading-none tracking-tight text-cyan-300 tabular text-readout">
+                        <span className="font-mono font-black text-5xl md:text-6xl leading-none tracking-tight text-cyan-300 tabular text-readout">
                             {altitude.toLocaleString().padStart(4, '0')}
                         </span>
                         <span className="font-mono text-sm font-bold text-cyan-400/70 text-readout">
@@ -137,7 +143,7 @@ export default function GameHUD({ onAbort }: GameHUDProps) {
                     {/* The best. A reference value, so it is white: violet is
                         the multiverse, and a personal record is not the
                         multiverse. */}
-                    <div className="font-mono text-[10px] uppercase tracking-[0.25em] text-zinc-500 text-readout">
+                    <div className="font-mono text-[11px] uppercase tracking-[0.25em] text-zinc-500 text-readout">
                         {isNewRecord ? (
                             <span className="inline-flex items-center gap-1.5 font-bold text-cyan-300">
                                 {/* A rising bar rather than a lightning glyph: same
@@ -176,7 +182,7 @@ export default function GameHUD({ onAbort }: GameHUDProps) {
               weight.
             */}
             <footer className="w-full flex justify-center pb-2">
-                <p className="font-mono text-[10px] md:text-[11px] uppercase tracking-[0.25em] text-zinc-500 text-readout">
+                <p className="font-mono text-[11px] md:text-xs uppercase tracking-[0.25em] text-zinc-500 text-readout">
                     <span className="text-zinc-300 font-bold">Hold</span>
                     <span className="hidden sm:inline"> click / space</span>
                     <span className="sm:hidden"> tap</span>

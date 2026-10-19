@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { MotionConfig } from "framer-motion";
 import NextImage from "next/image";
 import GameCanvas from "@/src/components/GameCanvas";

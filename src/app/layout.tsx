@@ -22,10 +22,39 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
-  title: "Tetherverse // Quantum Multiverse Ascent",
-  description: "Fractured Multiverse Grappling & High-Altitude Physics Climbing Loop.",
+  metadataBase: new URL(
+    process.env.NEXT_PUBLIC_SITE_URL ?? "https://tetherverse.vercel.app"
+  ),
+  title: "Tetherverse",
+  description:
+    "One button, four parallel worlds. Hold to tether, release to launch, and climb until the multiverse gives out.",
+  applicationName: "Tetherverse",
+  keywords: ["climbing game", "arcade", "multiverse", "one-button"],
+  openGraph: {
+    type: "website",
+    siteName: "Tetherverse",
+    title: "Tetherverse",
+    description:
+      "One button, four parallel worlds. Hold to tether, release to launch, and climb until the multiverse gives out.",
+    images: [{ url: "/logo.png", width: 512, height: 512, alt: "Tetherverse" }],
+  },
+  twitter: {
+    card: "summary",
+    title: "Tetherverse",
+    description:
+      "One button, four parallel worlds. Hold to tether, release to launch, and climb until the multiverse gives out.",
+    images: ["/logo.png"],
+  },
+  // A game is installed, not bookmarked. Asking for the home-screen treatment
+  // costs one line and is the difference between an app and a tab.
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
+    title: "Tetherverse",
+  },
   icons: {
     icon: "/logo.png",
+    apple: "/logo.png",
   },
 };
 

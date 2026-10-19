@@ -9,102 +9,127 @@ interface LeaderboardEntryProps {
     player: LeaderboardPlayer;
     rank: number;
     isCurrentUser: boolean;
+    /**
+     * The best altitude on the board, so that the bar in the altitude column
+     * can be drawn to scale. It is passed in rather than looked up because a
+     * row knows nothing about the rows above it.
+     */
+    topAltitude?: number;
 }
 
-function LeaderboardEntry({ player, rank, isCurrentUser }: LeaderboardEntryProps) {
+/**
+ * A row of the board.
+ *
+ * The old row was a rounded box with a border, and the top three came with a
+ * gold, a silver and a bronze chip plus an amber border on the first and the
+ * third. All of that decoration was louder than the one number the
+ * leaderboard exists to show, and the amber borders landed on the two rows
+ * that were *not* the player's, which read as "selected" for the wrong people.
+ *
+ * So the row is now a line of type. The rank is a quiet numeral, the podium
+ * is carried by weight rather than by metal, the altitude column carries a bar
+ * drawn to scale so the eye goes to the data, and the player's own row is the
+ * one thing on the board that is coloured.
+ */
+function LeaderboardEntry({ player, rank, isCurrentUser, topAltitude = 0 }: LeaderboardEntryProps) {
     const [imageError, setImageError] = useState(false);
 
-    /**
-     * Rank treatment.
-     *
-     * Numerals, not medal glyphs. A trophy or medal renders as a full-colour
-     * image on Windows and Android, which is the only saturated thing on a screen
-     * built out of one accent and a neutral ramp, and it reads as clip art rather
-     * than instrumentation. `tabular` keeps the digit from shifting as ranks
-     * change, and gold and silver carry the podium without needing a picture.
-     */
-    const getRankStyles = (r: number) => {
-        switch (r) {
-            case 1:
-                return {
-                    badge: "bg-amber-400 text-zinc-950 font-bold border border-amber-300 shadow-sm",
-                    row: "bg-amber-950/20 border-amber-500/30 hover:border-amber-500/50",
-                };
-            case 2:
-                return {
-                    badge: "bg-zinc-200 text-zinc-950 font-bold border border-zinc-100 shadow-sm",
-                    row: "bg-zinc-900/50 border-zinc-700/40 hover:border-zinc-700/60",
-                };
-            case 3:
-                return {
-                    badge: "bg-amber-700 text-amber-100 font-bold border border-amber-600 shadow-sm",
-                    row: "bg-amber-950/10 border-amber-700/30 hover:border-amber-700/50",
-                };
-            default:
-                return {
-                    badge: "bg-zinc-900 text-zinc-400 border border-zinc-800",
-                    row: "bg-zinc-900/30 border-zinc-800/60 hover:border-zinc-700/80",
-                };
-        }
-    };
-
-    const rankStyle = getRankStyles(rank);
+    // How much of the board's best this row reached. The bar is right-aligned
+    // and grows leftwards from the same edge for every row, so the lengths can
+    // be compared by eye.
+    const share = topAltitude > 0 ? Math.min(100, (player.maxAltitude / topAltitude) * 100) : 0;
 
     return (
-        <motion.div
+        <motion.li
             initial={{ opacity: 0, x: -10 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ duration: 0.25 }}
-            className={`flex items-center justify-between p-3.5 rounded-[var(--radius-panel)] border transition-colors duration-150 ${isCurrentUser
-                ? "bg-zinc-900/90 border-zinc-400/50 shadow-sm"
-                : rankStyle.row
-                }`}
+            className="relative flex items-center gap-3.5 pl-3 py-3"
         >
-            <div className="flex items-center gap-3.5 min-w-0">
-                {/* Ranking Token Badge */}
-                <div className={`w-8 h-8 rounded-[var(--radius-control)] border font-mono text-xs tabular flex items-center justify-center shrink-0 ${rankStyle.badge}`}>
-                    {rank}
-                </div>
+            {/*
+              The player's own row, marked once and unmistakably: a signal
+              coloured edge down the side of the row. Cyan is the player's
+              presence in the token vocabulary, so the one row that is about
+              the player is the one row that wears it.
+            */}
+            {isCurrentUser && (
+                <span
+                    aria-hidden="true"
+                    className="absolute left-0 top-1/2 -translate-y-1/2 h-9 w-[2px] rounded-full bg-cyan-400"
+                />
+            )}
 
-                {/* Profile Vector Frame */}
-                <div className="relative w-9 h-9 rounded-[var(--radius-control)] overflow-hidden border border-zinc-800 bg-zinc-900 shrink-0 flex items-center justify-center">
-                    {player.image && !imageError ? (
-                        <Image
-                            src={player.image}
-                            alt={player.name}
-                            width={36}
-                            height={36}
-                            className="w-full h-full object-cover"
-                            onError={() => setImageError(true)}
-                            unoptimized
-                        />
-                    ) : (
-                        <div className="w-full h-full bg-zinc-800 flex items-center justify-center font-bold text-xs text-zinc-400 uppercase">
-                            {player.name ? player.name.charAt(0) : '?'}
-                        </div>
-                    )}
-                </div>
+            {/* The rank. Numerals, not medal glyphs: a trophy renders as a
+                full-colour image on Windows and Android, which is the only
+                saturated thing on a screen built out of one accent and a
+                neutral ramp. The podium is carried by weight instead, and the
+                digit is tabular so it does not shift as the board changes. */}
+            <span
+                className={`w-5 shrink-0 text-right font-mono text-[13px] tabular ${
+                    rank <= 3 ? "text-zinc-300" : "text-zinc-600"
+                }`}
+            >
+                {rank}
+            </span>
 
-                <div className="flex items-center gap-2 truncate">
-                    <span className={`text-sm font-semibold truncate ${isCurrentUser ? "text-white" : "text-zinc-200"}`}>
-                        {player.name}
-                    </span>
-                    {isCurrentUser && (
-                        <span className="font-mono text-[9px] bg-zinc-800 text-zinc-200 border border-zinc-700 px-1.5 py-0.5 rounded uppercase tracking-wider shrink-0 font-medium">
-                            YOU
-                        </span>
-                    )}
-                </div>
+            {/*
+              The avatar. One mark, two ways of filling it: a photograph and the
+              monogram that stands in for a missing one are the same object —
+              same size, same tight radius, same hairline ring, same flat
+              backdrop. The picture is also pulled to monochrome, because these
+              are Google's own avatars and they arrive in whatever colour the
+              account happened to be given: a green tile, a purple tile and a
+              face, side by side, in a product with one accent and a neutral
+              ramp. Monochrome, they are a set of marks instead of three
+              unrelated pictures, and nothing on the row shouts louder than the
+              altitude.
+            */}
+            <div className="relative w-9 h-9 rounded-[var(--radius-control)] overflow-hidden bg-zinc-800/70 ring-1 ring-inset ring-white/10 shrink-0 flex items-center justify-center">
+                {player.image && !imageError ? (
+                    <Image
+                        src={player.image}
+                        alt={player.name}
+                        width={36}
+                        height={36}
+                        className="w-full h-full object-cover grayscale opacity-90"
+                        onError={() => setImageError(true)}
+                        unoptimized
+                    />
+                ) : (
+                    <div className="w-full h-full flex items-center justify-center font-mono font-bold text-xs text-zinc-300 uppercase">
+                        {player.name ? player.name.charAt(0) : '?'}
+                    </div>
+                )}
             </div>
 
-            {/* Score Metric */}
-            <div className="text-right pl-3 shrink-0">
-                <span className="font-mono text-base font-bold text-white tabular">
+            <span
+                className={`text-[15px] truncate ${isCurrentUser ? "text-white font-semibold" : "text-zinc-300 font-medium"}`}
+            >
+                {player.name}
+            </span>
+
+            {isCurrentUser && (
+                <span className="font-mono text-[10px] bg-cyan-400/10 text-cyan-300 border border-cyan-400/25 px-1.5 py-px rounded-full uppercase tracking-wider shrink-0 font-semibold">
+                    You
+                </span>
+            )}
+
+            {/* The data column. The number is the loudest thing on the row, and
+                the bar under it is drawn to scale, so the board reads as a
+                chart of how far each climber got. */}
+            <div className="ml-auto flex flex-col items-end gap-1.5 w-28 sm:w-32 shrink-0">
+                <span className="font-mono text-xl font-bold text-white tabular leading-none">
                     {player.maxAltitude.toLocaleString()}
-                    <span className="text-zinc-400 text-xs font-normal ml-0.5">m</span>
+                    <span className="text-zinc-500 text-[13px] font-normal ml-0.5">m</span>
+                </span>
+                <span aria-hidden="true" className="block h-[3px] w-full rounded-full bg-white/[0.05]">
+                    <span
+                        className="block h-full ml-auto rounded-full bg-white/30"
+                        style={{ width: `${share}%` }}
+                    />
                 </span>
             </div>
-        </motion.div>
+        </motion.li>
     );
 }
 

@@ -38,8 +38,10 @@ export default function ProfileCard({ user, onLogout }: ProfileCardProps) {
               The avatar is a mark, not a widget: a tight radius, a hairline
               ring and one flat backdrop, so that a photograph and the letter
               tile that stands in for a missing one are the same object. The
-              photograph is dimmed a little so that it cannot outshine the
-              numbers in the menu.
+              photograph is pulled to monochrome, because these are Google's own
+              avatars and they arrive in whatever colour the account was given,
+              and a menu with one accent should not have a second colour in its
+              corner.
             */}
             <div className="relative w-9 h-9 rounded-[var(--radius-control)] overflow-hidden bg-zinc-800/70 ring-1 ring-inset ring-white/10 shrink-0 flex items-center justify-center">
                 {user.image && !imageError ? (
@@ -48,7 +50,7 @@ export default function ProfileCard({ user, onLogout }: ProfileCardProps) {
                         alt={user.name}
                         width={36}
                         height={36}
-                        className="w-full h-full object-cover opacity-90"
+                        className="w-full h-full object-cover grayscale opacity-90"
                         onError={() => setImageError(true)}
                         unoptimized
                     />
@@ -69,12 +71,12 @@ export default function ProfileCard({ user, onLogout }: ProfileCardProps) {
               twice. The menu shows it once now.
             */}
             <div className="relative flex flex-col min-w-0">
-                <span className="text-sm font-semibold text-zinc-100 tracking-tight leading-tight truncate max-w-36 md:max-w-48 text-readout">
+                <span className="text-[15px] font-semibold text-zinc-100 tracking-tight leading-tight truncate max-w-36 md:max-w-48 text-readout">
                     {user.name}
                 </span>
                 <button
                     onClick={onLogout}
-                    className="self-start font-mono text-[10px] uppercase tracking-[0.2em] text-zinc-500 hover:text-zinc-200 transition-colors duration-150 cursor-pointer"
+                    className="self-start font-mono text-[11px] uppercase tracking-[0.2em] text-zinc-500 hover:text-zinc-200 transition-[color] duration-150 cursor-pointer"
                 >
                     Sign out
                 </button>
