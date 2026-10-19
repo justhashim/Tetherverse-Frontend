@@ -1,7 +1,7 @@
 import Phaser, { Scene } from "phaser";
 import { Player } from "../entities/Player";
 import { GAME_CONSTANTS } from "../config/game-constants";
-import { environmentForAltitude } from "../config/difficulty";
+import { environmentForAltitude, hazardStateForAltitude, profileForAltitude } from "../config/difficulty";
 import { BasePlatform } from "../terrain/BasePlatform";
 import { Coin, createCoinTexture } from "../terrain/Coin";
 import { PivotEngine } from "../physics/PivotEngine";
@@ -372,6 +372,17 @@ export class GameScene extends Scene {
         });
 
         this.dispatchAltitudeUpdate();
+
+        // The dial, on the console, for development. It is the only way to
+        // ask what the mountain is at an altitude without climbing to it, and
+        // it is where a themed world reads the mountain it is modulating.
+        if (process.env.NODE_ENV !== 'production') {
+            (window as unknown as { __tetherverseDifficulty?: unknown }).__tetherverseDifficulty = {
+                profileForAltitude,
+                hazardStateForAltitude,
+                environmentForAltitude,
+            };
+        }
 
         if (typeof window !== 'undefined') {
             window.dispatchEvent(new CustomEvent('tetherverse:game-ready'));
