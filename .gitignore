@@ -17,6 +17,12 @@
 /.next/
 /out/
 
+# cloudflare workers
+# The OpenNext build output and the wrangler local state are both generated.
+/.open-next/
+/.wrangler/
+worker-configuration.d.ts
+
 # production
 /build
 

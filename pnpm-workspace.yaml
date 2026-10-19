@@ -1,8 +1,12 @@
 allowBuilds:
-  '@prisma/engines': true
-  prisma: true
+  # Required by the Cloudflare toolchain, all of it dev-only.
+  #
+  # workerd is the Workers runtime: `wrangler dev` and `opennextjs-cloudflare
+  # preview` cannot start without its binary. esbuild is the bundler inside
+  # wrangler and @opennextjs/cloudflare. sharp is pulled in by both wrangler's
+  # miniflare and next, and is what a local image optimizer would use.
+  esbuild: true
+  workerd: true
   sharp: true
+  # The napi resolver binary that eslint's import resolver uses.
   unrs-resolver: true
-ignoredBuiltDependencies:
-  - sharp
-  - unrs-resolver

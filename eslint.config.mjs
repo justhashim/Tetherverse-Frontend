@@ -12,6 +12,12 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // The OpenNext build output and the wrangler local state are generated.
+    // .open-next/ contains a full copy of the Next.js runtime, so linting it
+    // exhausts memory rather than reporting a style problem.
+    ".open-next/**",
+    ".wrangler/**",
+    "worker-configuration.d.ts",
   ]),
 ]);
 

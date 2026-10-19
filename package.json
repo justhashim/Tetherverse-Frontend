@@ -5,15 +5,19 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "build:worker": "node -e \"require('fs').copyFileSync('env.prod','.env.production')\" && opennextjs-cloudflare build",
+    "deploy": "wrangler deploy",
+    "preview": "opennextjs-cloudflare preview",
+    "cf-typegen": "wrangler types",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "type-check": "tsc --noEmit"
   },
   "dependencies": {
-    "@prisma/client": "^7.8.0",
     "framer-motion": "^12.40.0",
     "howler": "^2.2.4",
     "matter-js": "^0.20.0",
-    "next": "16.2.9",
+    "next": "16.4.2",
     "phaser": "^4.1.0",
     "react": "19.2.4",
     "react-dom": "19.2.4",
@@ -22,15 +26,16 @@
     "zustand": "^5.0.14"
   },
   "devDependencies": {
+    "@opennextjs/cloudflare": "^1.20.12",
     "@tailwindcss/postcss": "^4.3.1",
     "@types/matter-js": "^0.20.2",
     "@types/node": "^20.19.43",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "eslint": "^9.39.4",
-    "eslint-config-next": "16.2.9",
-    "prisma": "^7.8.0",
+    "eslint-config-next": "16.4.2",
     "tailwindcss": "^4.3.1",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "wrangler": "^4.151.2"
   }
 }

@@ -28,7 +28,9 @@
     "**/*.tsx",
     ".next/types/**/*.ts",
     ".next/dev/types/**/*.ts",
-    "**/*.mts"
+    ".open-next/types/**/*.ts",
+    "**/*.mts",
+    "worker-configuration.d.ts"
   ],
   "exclude": ["node_modules"]
 }

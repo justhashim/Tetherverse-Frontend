@@ -1,0 +1,14 @@
+name = "tetherverse-frontend"
+main = ".open-next/worker.js"
+
+# Matches the Excel Play launcher's Worker, so both apps on Cloudflare run the
+# same runtime and the team has one compatibility date to reason about.
+compatibility_date = "2025-12-15"
+
+# OpenNext needs the Node.js compatibility layer for the runtime APIs its
+# server-side route handlers rely on.
+compatibility_flags = ["nodejs_compat"]
+
+[assets]
+directory = ".open-next/assets"
+binding = "ASSETS"
