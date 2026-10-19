@@ -27,6 +27,40 @@ const BANKING_FOOT_TOLERANCE = 18;
  */
 const BACKGROUND_MARGIN = 1400;
 
+/**
+ * How far beyond the visible edge the sky is drawn, in world units.
+ *
+ * The sky is anchored from the camera's scroll during update(), but the camera
+ * runs its follow lerp during preRender, so the anchor is always a frame
+ * behind. A camera moving a hundred units a frame would otherwise open a
+ * sliver of bare page at the edge on alternating frames.
+ */
+const BACKGROUND_OVERSCAN = 220;
+
+/**
+ * The stretch of mountain the window must always show, in world units.
+ *
+ * 1600 is the design height, and a 390x844 phone already shows exactly all of
+ * it under the old scaling. Locking every viewport to it means a monitor gets
+ * the same run rendered larger rather than a different run rendered small: the
+ * player is 52px on a phone and 55px at 1440x900, instead of 184px on a
+ * 1080p screen where it was, because the window's height, not its aspect
+ * ratio, decides how much world there is.
+ */
+const DESIGN_HEIGHT = 1600;
+
+/**
+ * How wide the view may get, in world units, before the height rule is
+ * overridden.
+ *
+ * The mountain is 2300 units wide (the corridor in the generator), so a view
+ * up to about 3000 shows the whole thing with a little sky either side. Beyond
+ * that the corridor becomes a stripe in the middle of an empty screen, and it
+ * is better to give up some height than to give the player a letterbox. It
+ * only binds on windows wider than about 2.6:1.
+ */
+const MAX_VIEW_WIDTH = 3000;
+
 export class GameScene extends Scene {
     private player!: Player;
     private pivotEngine!: PivotEngine;
@@ -178,9 +212,29 @@ export class GameScene extends Scene {
     create() {
         this.backgroundLayer = this.add.tileSprite(0, 0, this.scale.width, this.scale.height, 'game-background')
             .setOrigin(0, 0)
-            .setScrollFactor(0)
+            // World-space, and re-anchored to the camera's view every frame in
+            // updateBackgroundMotion.
+            //
+            // It was scrollFactor(0), which pins a sprite to the frame under
+            // zoom 1 and stops doing so the moment there is a zoom: the sky
+            // came off the top and the left of the screen and left bare page
+            // showing. Anchoring to worldView instead is true by construction -
+            // the sprite is the rectangle the camera is looking at - and it
+            // needs no special case for the scale mode, so the next person to
+            // change how the window is sized does not have to find this again.
+            .setScrollFactor(1)
             .setDepth(-2000)
             .setTileScale(3.5, 3.5);
+
+        // The view is sized before anything is scattered against it: the sky's
+        // band, the recycle edges and the line the run ends on are all measured
+        // in world units of the view, and none of them has a value until the
+        // camera knows how big the window is.
+        this.applyViewport();
+        this.scale.on(Phaser.Scale.Events.RESIZE, this.applyViewport, this);
+        this.events.once("shutdown", () => {
+            this.scale.off(Phaser.Scale.Events.RESIZE, this.applyViewport, this);
+        });
 
         this.seedBackgroundObjects();
 
@@ -547,34 +601,66 @@ export class GameScene extends Scene {
     }
 
     /**
+     * Sizes the view to the window.
+     *
+     * Everything about how much world reaches the screen lives here and
+     * nowhere else. It used to be spread across a scale mode, a camera and a
+     * crop, and on a landscape monitor the three of them disagreed, which is
+     * how the player ended up at 184px on a 1080p screen and 52px on a phone.
+     *
+     * The window's height decides how much mountain there is: always the
+     * design's 1600 units, so every device plays the same run and a bigger
+     * screen simply draws it bigger. The width follows the aspect ratio until
+     * it would become a letterbox, at which point the height rule bends.
+     *
+     * Called from create() and on every resize; RESIZE mode makes the canvas
+     * the window, so a resize changes both the window and what is drawn in it.
+     */
+    private applyViewport() {
+        const width = this.scale.width;
+        const height = this.scale.height;
+        if (width <= 0 || height <= 0) return;
+
+        const zoom = Math.max(height / DESIGN_HEIGHT, width / MAX_VIEW_WIDTH);
+        this.cameras.main.setZoom(zoom);
+        // The sky is sized and placed from this same view every frame in
+        // updateBackgroundMotion, so there is nothing else to tell about it.
+    }
+
+    /**
+     * The window in world units: what the player can actually see.
+     *
+     * `camera.width` is the viewport in pixels, and it stops being the world
+     * shown the moment there is a zoom - which there always is now. Every
+     * off-screen test and every scatter band in this scene is measured against
+     * the view rather than against the camera's rectangle.
+     */
+    private get viewWidth(): number {
+        return this.cameras.main.width / this.cameras.main.zoom;
+    }
+
+    private get viewHeight(): number {
+        return this.cameras.main.height / this.cameras.main.zoom;
+    }
+
+    /**
      * The bottom of the screen, in world coordinates.
      *
-     * The camera's rectangle is the game's resolution, and in ENVELOP mode
-     * that is taller than the window: the canvas is scaled up until it covers
-     * the screen and the top and the bottom of it are cropped away. The
-     * player can only see the middle of the camera's rectangle, so the line
-     * the run ends on has to be measured against the part of it that is
-     * actually on the screen. Measured against the camera instead, the player
-     * falls most of a screen past the bottom of the window before the game
-     * notices that they are gone.
+     * Phaser centres the view on `scrollY + height/2` and spans
+     * `height / zoom` world units either side of that centre, so the edge is
+     * half the viewport plus half the view - which is why these two halves are
+     * added rather than one of them being the other.
+     *
+     * Under ENVELOP this used to be a measurement of how much of a too-tall
+     * canvas survived being cropped, which was the scaling mode leaking into
+     * the death condition: the player fell most of a screen past the bottom of
+     * the window before the game noticed. Under RESIZE there is nothing to
+     * crop, so the whole of the camera's view is on screen and this is just
+     * its lower edge.
      */
     private getVisibleBottom(): number {
         const camera = this.cameras.main;
-        const game = this.scale.gameSize;
-        const parent = this.scale.parentSize;
-
-        // The canvas is scaled up until it covers the window, so the height of
-        // the world the player can see is the height of the window divided by
-        // that scale. A quarter of the game is the floor: a window that has
-        // not been measured yet must not put the end of the run above the
-        // player's feet.
-        const canvasScale = game.width > 0 ? this.scale.displaySize.width / game.width : 1;
-        const visibleHeight = Math.max(
-            game.height * 0.25,
-            Math.min(game.height, parent.height / canvasScale)
-        );
-
-        return camera.scrollY + (game.height + visibleHeight) / 2;
+        return camera.scrollY + (camera.height + this.viewHeight) / 2;
     }
 
     /**
@@ -734,17 +820,16 @@ export class GameScene extends Scene {
         this.backgroundObjects.forEach(object => object.destroy());
         this.backgroundObjects = [];
 
-        const camera = this.cameras.main;
-
-        // The band is the camera's own rectangle plus the margin on each
-        // side, which is where an object may sit and still be somewhere the
-        // player could see it. The density is the density the sky has always
-        // had, so the world looks the same as it did when the band was a
-        // fixed strip of the world.
-        let offset = camera.height + BACKGROUND_MARGIN;
+        // The band is the view's own rectangle plus the margin on each side,
+        // which is where an object may sit and still be somewhere the player
+        // could see it. The density is the density the sky has always had, so
+        // the world looks the same as it did when the band was a fixed strip
+        // of the world. It is the view and not the camera's rectangle, because
+        // zoom makes those two different sizes.
+        let offset = this.viewHeight + BACKGROUND_MARGIN;
         while (offset > -BACKGROUND_MARGIN) {
             const object = this.createBackgroundObject(
-                Phaser.Math.Between(-180, camera.width + 180),
+                Phaser.Math.Between(-180, this.viewWidth + 180),
                 offset
             );
             this.backgroundObjects.push(object);
@@ -787,8 +872,30 @@ export class GameScene extends Scene {
 
     private updateBackgroundMotion() {
         if (this.backgroundLayer) {
-            this.backgroundLayer.tilePositionY = this.cameras.main.scrollY * 0.25;
-            this.backgroundLayer.tilePositionX = this.cameras.main.scrollX * 0.05;
+            const camera = this.cameras.main;
+
+            // The view's own rectangle, worked out the way Phaser's preRender
+            // works it out: the centre sits half a viewport along from the
+            // scroll, and the view spans `viewport / zoom` either side of that
+            // centre. Computed rather than read from camera.worldView because
+            // preRender - which writes it, and which also runs the camera's
+            // follow lerp - has not happened yet when update() runs, so the
+            // worldView still describes the previous frame.
+            //
+            // The +OVERSCAN keeps the edge a frame's camera movement away from
+            // the screen, so the lag in the scroll value never shows up as a
+            // sliver of page down either side.
+            const viewW = this.viewWidth;
+            const viewH = this.viewHeight;
+            const left = camera.scrollX + camera.width / 2 - viewW / 2 - BACKGROUND_OVERSCAN;
+            const top = camera.scrollY + camera.height / 2 - viewH / 2 - BACKGROUND_OVERSCAN;
+
+            this.backgroundLayer.setPosition(left, top);
+            this.backgroundLayer.setSize(viewW + BACKGROUND_OVERSCAN * 2, viewH + BACKGROUND_OVERSCAN * 2);
+
+            // Slower than the world: that is what makes it sky.
+            this.backgroundLayer.tilePositionY = camera.scrollY * 0.25;
+            this.backgroundLayer.tilePositionX = camera.scrollX * 0.05;
         }
 
         if (!this.backgroundObjects.length) {
@@ -806,15 +913,15 @@ export class GameScene extends Scene {
             const cameraY = object.y - camera.scrollY * object.scrollFactorY;
             const cameraX = object.x - camera.scrollX * object.scrollFactorX;
 
-            if (cameraY > camera.height + BACKGROUND_MARGIN) {
+            if (cameraY > this.viewHeight + BACKGROUND_MARGIN) {
                 // Drifted off the bottom: put it back above the top.
                 this.recycleBackgroundObject(object, cameraX, -BACKGROUND_MARGIN);
             } else if (cameraY < -BACKGROUND_MARGIN) {
-                this.recycleBackgroundObject(object, cameraX, camera.height + BACKGROUND_MARGIN);
-            } else if (cameraX > camera.width + BACKGROUND_MARGIN) {
+                this.recycleBackgroundObject(object, cameraX, this.viewHeight + BACKGROUND_MARGIN);
+            } else if (cameraX > this.viewWidth + BACKGROUND_MARGIN) {
                 this.recycleBackgroundObject(object, -BACKGROUND_MARGIN, cameraY);
             } else if (cameraX < -BACKGROUND_MARGIN) {
-                this.recycleBackgroundObject(object, camera.width + BACKGROUND_MARGIN, cameraY);
+                this.recycleBackgroundObject(object, this.viewWidth + BACKGROUND_MARGIN, cameraY);
             }
         }
     }
