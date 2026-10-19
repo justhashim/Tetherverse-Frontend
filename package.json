@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "build:worker": "node -e \"require('fs').copyFileSync('env.prod','.env.production')\" && opennextjs-cloudflare build",
+    "build:worker": "node scripts/build-worker.mjs",
     "deploy": "wrangler deploy",
     "preview": "opennextjs-cloudflare preview",
     "cf-typegen": "wrangler types",
