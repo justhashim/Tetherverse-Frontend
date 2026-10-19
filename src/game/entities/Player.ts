@@ -2,7 +2,7 @@ import Phaser from "phaser";
 import { GAME_CONSTANTS } from "../config/game-constants";
 import { COLLISION_CHANNELS } from "../config/physics-channels";
 
-export type PlayerState = "IDLE" | "AIMING" | "LAUNCHED" | "FALLING";
+export type PlayerState = "IDLE" | "LAUNCHED" | "FALLING";
 
 export class Player extends Phaser.GameObjects.Sprite {
     public override body!: MatterJS.BodyType;
@@ -82,8 +82,6 @@ export class Player extends Phaser.GameObjects.Sprite {
             this.scene.matter.body.setVelocity(this.body, { x: 0, y: 0 });
             this.scene.matter.body.setAngularVelocity(this.body, 0);
             this.play('hero_idle', true);
-        } else if (newState === "AIMING") {
-            this.play('hero_aim', true);
         } else if (newState === "LAUNCHED") {
             this.play('hero_swing', true);
         } else if (newState === "FALLING") {
@@ -121,21 +119,10 @@ export class Player extends Phaser.GameObjects.Sprite {
         } else if (this.playerState === "IDLE" && routeDirection !== 0) {
             // Grounded: face upcoming route direction
             targetDirection = routeDirection;
-        } else if (this.playerState === "AIMING" && activeAnchorPoint) {
-            // Aiming pose: face the targeted anchor node
-            const dx = activeAnchorPoint.x - this.x;
-            if (Math.abs(dx) > 15) {
-                targetDirection = dx > 0 ? 1 : -1;
-            }
         }
 
         this.facingDirection = targetDirection;
         // setFlipX cleanly flips texture UVs without touching Matter physics scale or vertices!
         this.setFlipX(this.facingDirection < 0);
-    }
-
-    public freeze(): void {
-        this.scene.matter.body.setVelocity(this.body, { x: 0, y: 0 });
-        this.scene.matter.body.setAngularVelocity(this.body, 0);
     }
 }

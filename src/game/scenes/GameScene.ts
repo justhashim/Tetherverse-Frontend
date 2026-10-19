@@ -1,6 +1,6 @@
 import Phaser, { Scene } from "phaser";
 import { Player } from "../entities/Player";
-import { GAME_CONSTANTS } from "../config/game-constants";
+import { GAME_CONSTANTS, tierForAltitude } from "../config/game-constants";
 import { BasePlatform } from "../terrain/BasePlatform";
 import { Coin, createCoinTexture } from "../terrain/Coin";
 import { PivotEngine } from "../physics/PivotEngine";
@@ -126,7 +126,7 @@ export class GameScene extends Scene {
                 // 3. Dispatch altitude event to update HUD overlay
                 this.dispatchAltitudeUpdate();
 
-                console.log(`☁️ Cloud Sync Complete: Loaded ${data.maxAltitude}m`);
+                console.debug('[tetherverse] cloud best', data.maxAltitude);
             }
 
             // Coins are seeded outside the altitude branch: a player who has never
@@ -173,7 +173,7 @@ export class GameScene extends Scene {
 
         this.seedBackgroundObjects();
 
-        this.matter.world.setGravity(0, 1.4);
+        this.matter.world.setGravity(0, GAME_CONSTANTS.WORLD.GRAVITY_Y);
         // Expand world bounds and disable the bottom physics wall so falling into the void is unrestricted
         this.matter.world.setBounds(0, -50000, 5000, 100000, 64, true, true, false, false);
 
@@ -191,14 +191,6 @@ export class GameScene extends Scene {
                 frames: this.anims.generateFrameNumbers('hero_sheet', { start: 1, end: 2 }),
                 frameRate: 2,
                 repeat: -1
-            });
-
-            // Row 2: Crouching / Launch Prep (Frames 5 to 9)
-            this.anims.create({
-                key: 'hero_aim',
-                frames: this.anims.generateFrameNumbers('hero_sheet', { start: 5, end: 9 }),
-                frameRate: 10,
-                repeat: 0
             });
 
             // Row 3: Freefall / Tumbling Down (Frames 10 to 14)
@@ -408,17 +400,21 @@ export class GameScene extends Scene {
             }
         }
 
-        // Stratum Environmental Powers/Downs: Atmospheric Crosswinds & Gravity Surges
+        // Weather.
+        //
+        // Keyed to the live altitude rather than the peak, so a player who has
+        // fallen out of the thin air gets a moment of calm to climb back into
+        // it. The mountain's shape is keyed to the peak and does not soften.
         if (this.player && this.player.body && this.player.playerState !== "IDLE") {
-            if (this.currentAltitudeMeters >= 350 && this.currentAltitudeMeters < 1500) {
-                // Stratosphere (>= 350m): Solar crosswinds
-                const windForceX = Math.sin(time * 0.0012) * 0.0007;
+            const weather = GAME_CONSTANTS.ENVIRONMENT[tierForAltitude(this.currentAltitudeMeters)];
+
+            if (weather.wind !== 0) {
+                const windForceX = Math.sin(time * weather.windFrequency) * weather.wind;
                 this.matter.body.applyForce(this.player.body, this.player.body.position, { x: windForceX, y: 0 });
-            } else if (this.currentAltitudeMeters >= 1500) {
-                // Exosphere (>= 1500m): Gravitational surge & ion storm shear
-                const windForceX = Math.sin(time * 0.0016) * 0.001;
-                const gravitySurgeY = 0.0005;
-                this.matter.body.applyForce(this.player.body, this.player.body.position, { x: windForceX, y: gravitySurgeY });
+            }
+
+            if (weather.surge !== 0) {
+                this.matter.body.applyForce(this.player.body, this.player.body.position, { x: 0, y: weather.surge });
             }
         }
 
@@ -484,7 +480,7 @@ export class GameScene extends Scene {
             // 2. Off-screen camera drop:
             // If the player is unhooked and has plummeted off the visible screen bottom
             const cameraBottom = this.cameras.main.worldView.bottom;
-            if (!isHooked && this.player.y > cameraBottom + 20 && this.player.body.velocity.y > 0) {
+            if (!isHooked && this.player.y > cameraBottom + GAME_CONSTANTS.DEATH.cameraMargin && this.player.body.velocity.y > 0) {
                 this.handlePlayerFailure();
                 return;
             }
@@ -505,7 +501,7 @@ export class GameScene extends Scene {
             // to the mountain base without recovering, the ascent is failed.
             const peakPixels = (this.groundReferenceY - this.runLowestY) - 20;
             const peakMeters = Math.max(0, Math.floor(peakPixels / 10));
-            if (peakMeters >= 20 && this.player.y >= this.groundReferenceY - 10 && !isHooked) {
+            if (peakMeters >= GAME_CONSTANTS.DEATH.climbMetres && this.player.y >= this.groundReferenceY - 10 && !isHooked) {
                 this.handlePlayerFailure();
                 return;
             }
@@ -552,7 +548,6 @@ export class GameScene extends Scene {
         // Must NEVER settle if player is aiming, launched, OR currently tethered to an anchor!
         if (
             !this.player ||
-            this.player.playerState === "AIMING" ||
             this.player.playerState === "LAUNCHED" ||
             (this.pivotEngine && this.pivotEngine.isCurrentlyHooked())
         ) {
@@ -588,7 +583,7 @@ export class GameScene extends Scene {
                 const speed = Math.hypot(velocity.x, velocity.y);
 
                 // Settle only gentle descents onto the platform surface (prevents halting fast airborne flights)
-                if (velocity.y >= 0 && speed < 5) {
+                if (velocity.y >= 0 && speed < GAME_CONSTANTS.LANDING.SPEED_THRESHOLD) {
                     this.matter.body.setVelocity(this.player.body, { x: 0, y: 0 });
                     this.matter.body.setAngularVelocity(this.player.body, 0);
 
@@ -913,7 +908,7 @@ export class GameScene extends Scene {
             const data = await response.json();
 
             if (data.updated) {
-                console.log(`🎉 New Personal Best! Saved ${data.maxAltitude}m to database.`);
+                console.debug('[tetherverse] new best saved', data.maxAltitude);
                 // You could trigger a Phaser UI text here saying "NEW RECORD!"
             }
 

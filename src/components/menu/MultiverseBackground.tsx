@@ -3,21 +3,26 @@
 import { motion } from "framer-motion";
 import Image from "next/image";
 
-// Deterministic star field nodes to avoid SSR hydration mismatches
-const STARS = Array.from({ length: 28 }).map((_, i) => ({
-    id: i,
-    top: `${((i * 37 + 13) % 92) + 4}%`,
-    left: `${((i * 67 + 23) % 94) + 3}%`,
-    size: (i % 3 === 0 ? 3 : i % 2 === 0 ? 2 : 1.5),
-    color: i % 4 === 0 ? 'rgba(0, 245, 255, 0.85)' : i % 4 === 1 ? 'rgba(168, 85, 247, 0.85)' : 'rgba(255, 255, 255, 0.9)',
-    duration: ((i * 11) % 4) + 2.5,
-    delay: ((i * 7) % 3) * 0.8,
-}));
-
+/**
+ * The environment the interface sits inside.
+ *
+ * Every layer here is art the game already ships. The nebula is the same file
+ * the Phaser scene tiles as its sky, the planets and asteroids are the same ones
+ * it scrolls past, and the starfield is its own.
+ *
+ * The menu used to draw a second, parallel sky instead: a synthetic grid horizon
+ * that exists in no asset, a layer of CSS stars that twinkle, and nebula
+ * gradients that exist nowhere. That meant the world a player looked at before
+ * playing was not the world they played in, and the transition between them was
+ * a cross-fade between two different skies.
+ *
+ * Nothing here is a control, and nothing here moves fast enough to notice. The
+ * motion is drift, at roughly the rate the game itself drifts.
+ */
 export default function MultiverseBackground() {
     return (
         <div className="absolute inset-0 pointer-events-none z-0 overflow-hidden select-none bg-[#030611]">
-            {/* Layer 1: High-Res Deep Cosmic Nebula Texture with Parallax Drift */}
+            {/* Layer 1: the game's own sky, drifting. */}
             <motion.div
                 className="absolute inset-[-5%] w-[110%] h-[110%]"
                 animate={{
@@ -35,20 +40,51 @@ export default function MultiverseBackground() {
                     src="/background/background.png"
                     alt=""
                     fill
-                    priority
-                    className="object-cover opacity-80 mix-blend-screen"
+                    preload
+                    className="object-cover opacity-90"
                 />
             </motion.div>
 
-            {/* Layer 2: Atmospheric Cosmic Nebulae & Dimensional Rifts */}
-            <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_40%,rgba(6,182,212,0.22)_0%,rgba(139,92,246,0.18)_35%,rgba(2,4,10,0.85)_80%)]" />
-            <div className="absolute top-[-20%] left-[-15%] w-[70vw] h-[70vw] rounded-full bg-violet-600/15 blur-[100px]" />
-            <div className="absolute bottom-[-10%] right-[-15%] w-[75vw] h-[75vw] rounded-full bg-cyan-500/15 blur-[120px]" />
-
-            {/* Layer 3: Celestial Bodies (Planets & Asteroids) */}
-            {/* Big Cosmic Planet */}
+            {/*
+              Layer 2: the game's own starfield. Two instances, drifting at the
+              slow rate the scene scrolls them at. This replaces a layer of
+              twenty-eight CSS stars that each ran their own opacity and scale
+              keyframe, which is a lot of animation for a background nobody
+              looks at.
+            */}
             <motion.div
-                className="absolute top-[8%] right-[5%] md:top-[12%] md:right-[10%] w-16 h-16 md:w-24 md:h-24 drop-shadow-[0_0_25px_rgba(139,92,246,0.5)]"
+                className="absolute top-[4%] left-[-6%] w-[48%] h-[30%] opacity-40"
+                animate={{ x: [0, 24, 0], y: [0, -12, 0] }}
+                transition={{ duration: 30, repeat: Infinity, ease: "easeInOut" }}
+            >
+                <Image
+                    src="/background/objects/blue-stars.png"
+                    alt=""
+                    fill
+                    className="object-contain"
+                />
+            </motion.div>
+
+            <motion.div
+                className="absolute bottom-[20%] right-[-4%] w-[40%] h-[27%] opacity-30"
+                animate={{ x: [0, -18, 0], y: [0, 10, 0] }}
+                transition={{ duration: 38, repeat: Infinity, ease: "easeInOut", delay: 2 }}
+            >
+                <Image
+                    src="/background/objects/blue-stars.png"
+                    alt=""
+                    fill
+                    className="object-contain"
+                />
+            </motion.div>
+
+            {/*
+              Layer 3: the celestial bodies the scene scrolls past, placed where
+              the interface is not. The interface sits in the lower left, so the
+              bodies live in the upper right and along the right edge.
+            */}
+            <motion.div
+                className="absolute top-[6%] right-[4%] md:top-[10%] md:right-[8%] w-16 h-16 md:w-24 md:h-24"
                 animate={{
                     y: [0, -12, 0],
                     rotate: [0, 10, 0],
@@ -64,13 +100,12 @@ export default function MultiverseBackground() {
                     alt=""
                     width={96}
                     height={96}
-                    className="w-full h-full object-contain filter drop-shadow-[0_0_15px_rgba(168,85,247,0.6)]"
+                    className="w-full h-full object-contain"
                 />
             </motion.div>
 
-            {/* Small Companion Planet */}
             <motion.div
-                className="absolute top-[42%] left-[4%] md:left-[8%] w-8 h-8 md:w-12 md:h-12 opacity-80 drop-shadow-[0_0_15px_rgba(6,182,212,0.4)]"
+                className="absolute top-[24%] left-[5%] md:left-[9%] w-8 h-8 md:w-12 md:h-12 opacity-80"
                 animate={{
                     y: [0, 10, 0],
                     x: [0, 6, 0],
@@ -91,9 +126,8 @@ export default function MultiverseBackground() {
                 />
             </motion.div>
 
-            {/* Drifting Asteroid 1 */}
             <motion.div
-                className="absolute bottom-[30%] left-[10%] md:left-[14%] w-9 h-8 opacity-70"
+                className="absolute top-[38%] right-[18%] w-9 h-8 opacity-70"
                 animate={{
                     y: [0, -15, 0],
                     rotate: [0, 360],
@@ -109,13 +143,12 @@ export default function MultiverseBackground() {
                     alt=""
                     width={36}
                     height={32}
-                    className="w-full h-full object-contain filter drop-shadow-[0_0_10px_rgba(0,0,0,0.8)]"
+                    className="w-full h-full object-contain"
                 />
             </motion.div>
 
-            {/* Drifting Asteroid 2 */}
             <motion.div
-                className="absolute top-[20%] left-[12%] w-6 h-5 opacity-60"
+                className="absolute bottom-[24%] right-[7%] w-6 h-5 opacity-60"
                 animate={{
                     y: [0, 12, 0],
                     rotate: [360, 0],
@@ -135,53 +168,19 @@ export default function MultiverseBackground() {
                 />
             </motion.div>
 
-            {/* Layer 4: Twinkling Celestial Starfield */}
-            {STARS.map((star) => (
-                <motion.span
-                    key={star.id}
-                    className="absolute rounded-full"
-                    style={{
-                        top: star.top,
-                        left: star.left,
-                        width: star.size,
-                        height: star.size,
-                        backgroundColor: star.color,
-                        boxShadow: `0 0 ${star.size * 3}px ${star.color}`,
-                    }}
-                    animate={{
-                        opacity: [0.2, 0.95, 0.2],
-                        scale: [0.8, 1.3, 0.8],
-                    }}
-                    transition={{
-                        duration: star.duration,
-                        repeat: Infinity,
-                        ease: "easeInOut",
-                        delay: star.delay,
-                    }}
-                />
-            ))}
+            {/*
+              Layer 4: the scrim.
 
-            {/* Layer 5: Perspective 3D Cyber-Grid Horizon at Bottom */}
-            <div className="absolute bottom-0 inset-x-0 h-48 md:h-64 overflow-hidden pointer-events-none opacity-40">
-                {/* Horizontal glowing beam */}
-                <div className="absolute top-0 inset-x-0 h-px bg-linear-to-r from-transparent via-cyan-400 to-transparent shadow-[0_0_20px_rgba(6,182,212,1)]" />
-                {/* 3D Perspective Plane */}
-                <div
-                    className="w-full h-full origin-top"
-                    style={{
-                        transform: "perspective(300px) rotateX(68deg)",
-                        backgroundImage:
-                            "linear-gradient(to right, rgba(6, 182, 212, 0.25) 1px, transparent 1px), linear-gradient(to bottom, rgba(139, 92, 246, 0.25) 1px, transparent 1px)",
-                        backgroundSize: "36px 36px",
-                    }}
-                />
-                {/* Bottom Fade Mask */}
-                <div className="absolute inset-0 bg-linear-to-t from-slate-950 via-transparent to-transparent" />
-            </div>
+              Text needs a darker surface than the nebula gives it, but the whole
+              screen does not. This is the base pass: a little weight at the top
+              for the identity bar, a little at the bottom for the call to
+              action, and nothing at all across the middle, so the world stays
+              visible where there is nothing to read.
 
-            {/* Layer 6: Vignette Readability Overlays for Mobile Top & Bottom */}
-            <div className="absolute top-0 inset-x-0 h-32 bg-linear-to-b from-slate-950/90 via-slate-950/50 to-transparent" />
-            <div className="absolute bottom-0 inset-x-0 h-44 bg-linear-to-t from-slate-950 via-slate-950/80 to-transparent" />
+              Screens add their own local scrim over the region their text
+              occupies. See MainMenu.
+            */}
+            <div className="absolute inset-0 bg-linear-to-b from-slate-950/75 via-transparent to-slate-950/60" />
         </div>
     );
 }

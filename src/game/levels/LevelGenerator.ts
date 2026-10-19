@@ -1,10 +1,9 @@
-// src/game/levels/LevelGenerator.ts
-
 import Phaser from "phaser";
 import { BasePlatform } from "../terrain/BasePlatform";
 import { CosmicHazard } from "../terrain/CosmicHazard";
 import { Coin } from "../terrain/Coin";
-import { GAME_CONSTANTS } from "../config/game-constants";
+import { GAME_CONSTANTS, tierForAltitude, type DifficultyTier } from "../config/game-constants";
+import { stratumForAltitude } from "../config/strata";
 import { COLLISION_CHANNELS } from "../config/physics-channels";
 import { createSeededRng, type Rng } from "./seeded-random";
 
@@ -38,8 +37,6 @@ type Beat =
  * moving a boundary in GAME_CONSTANTS.ALTITUDE moves the platform shapes, the
  * crumbling rolls and the hazard density together.
  */
-export type DifficultyTier = 'TUTORIAL' | 'INTERMEDIATE' | 'HARD' | 'EXPERT' | 'ENDLESS';
-
 export interface DifficultyProfile {
     widthMin: number;
     widthMax: number;
@@ -55,6 +52,7 @@ export interface DifficultyProfile {
     anchorOffsetMax: number;
     recoveryChance: number;
     riskChance: number;
+    reliefChance: number;
     chainLength: number;
     voidMargin: number;
     patterns: readonly PatternId[];
@@ -137,15 +135,15 @@ export class LevelGenerator {
     private lastPattern: PatternId | null = null;
     private currentProfile: DifficultyProfile;
     private currentAltitudeMeters: number = 0;
-      /**
-       * Highest altitude reached this run. Difficulty is selected from this rather
-       * than from the live altitude, so falling never makes the mountain kinder.
-       *
-       * A launch tops out near 96 m/s, enough to cross a whole tier in one chain.
-       * Keying off the live altitude let a strong player reach ENDLESS without a
-       * single platform being generated for the bands in between.
-       */
-      private peakAltitudeMeters: number = 0;
+    /**
+     * Highest altitude reached this run. Difficulty is selected from this rather
+     * than from the live altitude, so falling never makes the mountain kinder.
+     *
+     * A single launch can carry a player across a whole tier, so keying off the
+     * live altitude let a strong player reach the top band without a single
+     * platform being generated for the bands in between.
+     */
+    private peakAltitudeMeters: number = 0;
     private currentDirection: number = 1; // 1 = ascending rightward, -1 = ascending leftward
     private stepsInDirection: number = 0;
 
@@ -338,6 +336,14 @@ export class LevelGenerator {
     private currentBeat(profile: DifficultyProfile): Beat {
         if (profile.chainLength <= 0) return "CHALLENGE";
         const idx = Math.floor(this.committedCount / profile.chainLength) % BEAT_SEQUENCE.length;
+
+        // A relief slot is a breather, and a breather is the one thing the
+        // difficulty budget is spent on. Past the tutorial, most of them are
+        // spent on something else instead.
+        if (BEAT_SEQUENCE[idx] === "RELIEF" && this.rng() >= profile.reliefChance) {
+            return "CHALLENGE";
+        }
+
         // riskChance is the chance a HIGH_RISK slot is used as such. It is 1 past the
         // tutorial, so those slots always land; only the tutorial, which must not
         // introduce risk, downgrades them to RISK.
@@ -564,6 +570,8 @@ export class LevelGenerator {
         prevHeight: number,
         nextX: number,
         nextY: number,
+        nextHeight: number,
+        profile: DifficultyProfile,
         spec: PatternSpec
     ): { x: number; y: number } {
         const deltaX = nextX - prevX;
@@ -573,7 +581,7 @@ export class LevelGenerator {
         const standY = prevY - prevHeight - GAME_CONSTANTS.PLAYER.RADIUS;
 
         // Target surface of the destination platform
-        const targetY = nextY - 35 - GAME_CONSTANTS.PLAYER.RADIUS;
+        const targetY = nextY - nextHeight - GAME_CONSTANTS.PLAYER.RADIUS;
 
         // Place anchor forward-biased between prevX and nextX (62% to 68% toward destination)
         const forwardRatio = 0.64 + this.between(-0.03, 0.03);
@@ -581,7 +589,7 @@ export class LevelGenerator {
 
         // Anchor must be elevated above both the standing and landing surfaces
         const minSurfaceY = Math.min(standY, targetY);
-        const desiredLift = this.between(160, 220) * spec.anchorLiftScale;
+        const desiredLift = this.between(profile.anchorLiftMin, profile.anchorLiftMax) * spec.anchorLiftScale;
         let anchorY = minSurfaceY - desiredLift;
 
         // Ensure anchor is within tether reach from the standing launch spot
@@ -621,9 +629,10 @@ export class LevelGenerator {
         // safety net and must never crumble.
         let isCrumbling = false;
         if (spec.risk) {
-            isCrumbling = tier !== 'TUTORIAL' && tier !== 'INTERMEDIATE' && this.rng() < 0.35;
+            isCrumbling = tier !== 'TUTORIAL'
+                && this.rng() < GAME_CONSTANTS.HAZARD.riskCrumble[tier];
         } else if (!spec.recovery && tier !== 'TUTORIAL') {
-            isCrumbling = this.rng() < (tier === 'EXPERT' || tier === 'ENDLESS' ? 0.22 : 0.12);
+            isCrumbling = this.rng() < GAME_CONSTANTS.HAZARD.crumble[tier];
         }
 
         const platform = new BasePlatform(
@@ -669,6 +678,8 @@ export class LevelGenerator {
                 this.prevHeight,
                 candidate.x,
                 candidate.y,
+                candidate.height,
+                profile,
                 spec
             );
             this.spawnHookAnchor(anchor.x, anchor.y);
@@ -694,13 +705,9 @@ export class LevelGenerator {
         if (tier === 'TUTORIAL') return;
 
         const dist = Math.hypot(candX - prevX, candY - prevY);
-        if (dist < 200) return;
+        if (dist < GAME_CONSTANTS.HAZARD.minGap) return;
 
-        const hazardChance = tier === 'ENDLESS' ? 0.60
-            : tier === 'EXPERT' ? 0.45
-                : 0.25;
-
-        if (this.rng() > hazardChance) return;
+        if (this.rng() > GAME_CONSTANTS.HAZARD.chance[tier]) return;
 
         // Position mid-air between platforms, offset slightly from direct line of flight
         const midX = (prevX + candX) / 2 + this.between(-30, 30);
@@ -876,12 +883,7 @@ export class LevelGenerator {
      * together rather than leaving them stranded at the old numbers.
      */
     private tierFor(altitudeMeters: number): DifficultyTier {
-        const a = GAME_CONSTANTS.ALTITUDE;
-        if (altitudeMeters < a.INTERMEDIATE_ZONE) return 'TUTORIAL';
-        if (altitudeMeters < a.HARD_ZONE) return 'INTERMEDIATE';
-        if (altitudeMeters < a.EXPERT_ZONE) return 'HARD';
-        if (altitudeMeters < a.ENDLESS_ZONE) return 'EXPERT';
-        return 'ENDLESS';
+        return tierForAltitude(altitudeMeters);
     }
 
     private getProfile(altitudeMeters: number): DifficultyProfile {
@@ -889,13 +891,7 @@ export class LevelGenerator {
     }
 
     public getZoneName(altitudeMeters: number): string {
-        switch (this.tierFor(altitudeMeters)) {
-            case 'TUTORIAL': return "SURFACE";
-            case 'INTERMEDIATE': return "TROPOSPHERE";
-            case 'HARD': return "STRATOSPHERE";
-            case 'EXPERT': return "MESOSPHERE";
-            case 'ENDLESS': return "EXOSPHERE";
-        }
+        return stratumForAltitude(altitudeMeters);
     }
 
     // =====================================================================
@@ -958,11 +954,7 @@ export class LevelGenerator {
             if (tier !== 'TUTORIAL') {
                 // An unstable anchor gives way on contact, so it is the same kind of
                 // decision as a crumbling platform: rare early, common high up.
-                const threshold = tier === 'ENDLESS' ? 0.55
-                    : tier === 'EXPERT' ? 0.45
-                        : tier === 'HARD' ? 0.35
-                            : 0.20;
-                isUnstable = this.rng() < threshold;
+                isUnstable = this.rng() < GAME_CONSTANTS.HAZARD.unstableAnchor[tier];
             }
         }
 

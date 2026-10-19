@@ -1,5 +1,3 @@
-// src/game/physics/PivotEngine.ts
-
 import Phaser from "phaser";
 import { Player } from "../entities/Player";
 import { COLLISION_CHANNELS } from "../config/physics-channels";
@@ -20,7 +18,7 @@ export class PivotEngine {
     // --- Unstable Quantum Anchor Decay State ---
     private isUnstableHooked: boolean = false;
     private unstableTimer: number = 0;
-    private readonly UNSTABLE_MAX_DURATION: number = 2200; // 2.2s before hook decay and snap
+    private readonly UNSTABLE_MAX_DURATION: number = GAME_CONSTANTS.HAZARD.unstableDurationMs;
     private currentHookedAnchorBody: MatterJS.BodyType | null = null;
 
     private readonly pointerDownHandler = (pointer: Phaser.Input.Pointer) => this.attemptAnchor(pointer);
@@ -283,17 +281,15 @@ export class PivotEngine {
             this.pivotConstraint = null;
         }
 
-        // Apply gentle launch boost preserving natural swing trajectory
+        // The release is the swing, exactly. There used to be an upward nudge
+        // added here for a launch that was moving sideways and falling, which
+        // handed back a little height the swing had not earned. A run that
+        // reads the arc should be the only way up.
         const boostX = swingVelocity.x * GAME_CONSTANTS.SWING.LAUNCH_BOOST;
-        let boostY = swingVelocity.y * GAME_CONSTANTS.SWING.LAUNCH_BOOST;
-
-        // Subtle upward assist only if moving horizontally and slightly falling
-        if (Math.abs(swingVelocity.x) > 2 && swingVelocity.y > 0) {
-            boostY -= 1.0;
-        }
+        const boostY = swingVelocity.y * GAME_CONSTANTS.SWING.LAUNCH_BOOST;
 
         const boostedSpeed = Math.hypot(boostX, boostY);
-        const maxSpeed = GAME_CONSTANTS.LAUNCH.MAX_LAUNCH_SPEED;
+        const maxSpeed = GAME_CONSTANTS.SWING.MAX_LAUNCH_SPEED;
 
         if (boostedSpeed > maxSpeed && boostedSpeed > 0) {
             const scale = maxSpeed / boostedSpeed;
