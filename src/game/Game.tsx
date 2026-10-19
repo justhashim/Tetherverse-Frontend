@@ -52,6 +52,17 @@ export default function Game({ isActive = true }: GameProps) {
             ...gameConfig,
             parent: containerRef.current, // Pass the direct node reference safely
           });
+
+          // The running game is otherwise unreachable from the page: the scene
+          // is private to the React tree and Phaser keeps no global registry.
+          // A handle on it is what makes a climb testable - the altitude, the
+          // world the generator is building, the frame time - without a
+          // second pair of eyes on the screen. Development only; the bundler
+          // drops the branch in a production build.
+          if (process.env.NODE_ENV !== "production") {
+            (window as unknown as { __tetherverseGame?: PhaserGame }).__tetherverseGame =
+              gameRef.current;
+          }
         }
       } catch (err) {
         console.error("Failed to load or initialize Phaser engine:", err);
