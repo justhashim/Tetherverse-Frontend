@@ -99,7 +99,7 @@ function IntroVideo({ onComplete }: { onComplete: () => void }) {
 
   return (
     <div
-      className={`fixed inset-0 w-screen h-screen bg-black z-50 overflow-hidden transition-opacity duration-1000 ease-out select-none ${isFadingOut ? "opacity-0 pointer-events-none" : "opacity-100"
+      className={`fixed inset-0 w-screen min-h-[100dvh] h-[100dvh] bg-black z-50 overflow-hidden transition-opacity duration-1000 ease-out select-none ${isFadingOut ? "opacity-0 pointer-events-none" : "opacity-100"
         }`}
     >
       <video
@@ -114,7 +114,7 @@ function IntroVideo({ onComplete }: { onComplete: () => void }) {
       {!hasInteracted ? (
         <div
           onClick={handleStartIntro}
-          className="absolute inset-0 w-full h-full bg-slate-950 flex flex-col items-center justify-center z-55 cursor-pointer select-none overflow-hidden"
+          className="absolute inset-0 w-full h-full bg-slate-950 flex flex-col items-center justify-center z-50 cursor-pointer select-none overflow-hidden"
         >
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(6,182,212,0.06)_0%,transparent_60%)] animate-pulse pointer-events-none" />
           <div className="relative font-mono text-xs md:text-sm tracking-[0.4em] text-cyan-400 uppercase animate-[pulse_2s_infinite] text-center px-4 pointer-events-none">
@@ -125,14 +125,14 @@ function IntroVideo({ onComplete }: { onComplete: () => void }) {
         <>
           <div
             onClick={triggerFadeOut}
-            className="absolute inset-0 z-51 cursor-pointer"
+            className="absolute inset-0 z-40 cursor-pointer"
           />
           <button
             onClick={(e) => {
               e.stopPropagation();
               triggerFadeOut();
             }}
-            className={`group absolute bottom-8 right-8 z-55 flex items-center gap-2 bg-zinc-900/80 hover:bg-zinc-800 text-zinc-300 hover:text-white font-mono text-xs tracking-wider uppercase px-4 py-2.5 rounded-lg border border-zinc-800 hover:border-zinc-700 transition-all duration-150 backdrop-blur-md shadow-sm active:scale-[0.98] cursor-pointer select-none ${isFadingOut ? "opacity-0 scale-95 pointer-events-none" : "opacity-100"
+            className={`group absolute bottom-8 right-8 z-50 flex items-center gap-2 bg-zinc-900/80 hover:bg-zinc-800 text-zinc-300 hover:text-white font-mono text-xs tracking-wider uppercase px-4 py-2.5 rounded-[var(--radius-control)] border border-zinc-800 hover:border-zinc-700 transition-all duration-150 backdrop-blur-md shadow-sm active:scale-[0.98] cursor-pointer select-none ${isFadingOut ? "opacity-0 scale-95 pointer-events-none" : "opacity-100"
               }`}
           >
             <span>SKIP INTRO</span>
@@ -291,12 +291,13 @@ export default function Home() {
   // View: Connecting to the Excel Play launcher
   if (bridge.status === 'awaiting') {
     return (
-      <main className="w-screen h-screen bg-slate-950 flex flex-col items-center justify-center gap-3 select-none">
-        <div className="relative w-10 h-10">
-          <div className="absolute inset-0 border-2 border-t-cyan-400 border-r-transparent border-b-transparent border-l-transparent rounded-full animate-spin" />
-          <div className="absolute inset-1.5 border-2 border-b-violet-500 border-r-transparent border-t-transparent border-l-transparent rounded-full animate-[spin_1s_linear_infinite_reverse]" />
-        </div>
-        <span className="text-slate-400 font-mono text-xs tracking-[0.3em] uppercase animate-pulse">
+      <main className="w-screen min-h-[100dvh] h-[100dvh] bg-slate-950 flex flex-col items-center justify-center gap-3 select-none">
+        <div
+            className="w-10 h-10 border-2 border-t-cyan-400 border-r-transparent border-b-transparent border-l-transparent rounded-full animate-spin"
+            role="status"
+            aria-label="Linking Excel Play session"
+        />
+        <span className="text-slate-400 font-mono text-xs tracking-[0.3em] uppercase">
           Linking Excel Play session...
         </span>
       </main>
@@ -308,9 +309,9 @@ export default function Home() {
   // usable sign-in inside the iframe. Say what happened and offer a retry instead.
   if (bridge.status === 'error') {
     return (
-      <main className="relative w-screen h-screen overflow-hidden bg-radial-dark flex flex-col items-center justify-center p-6 select-none">
+      <main className="relative w-screen min-h-[100dvh] h-[100dvh] overflow-hidden bg-radial-dark flex flex-col items-center justify-center p-6 select-none">
         <MultiverseBackground />
-        <div className="relative z-10 w-full max-w-md bg-slate-950/70 border border-rose-500/30 rounded-3xl p-8 text-center backdrop-blur-xl">
+        <div className="relative z-10 w-full max-w-md bg-slate-950/70 border border-rose-500/30 rounded-[var(--radius-panel)] p-8 text-center backdrop-blur-xl">
           <h1 className="text-xl font-black text-white tracking-tight uppercase mb-2">
             Session link failed
           </h1>
@@ -320,7 +321,7 @@ export default function Home() {
           </p>
           <button
             onClick={() => window.location.reload()}
-            className="px-5 py-2.5 rounded-xl bg-cyan-500/15 hover:bg-cyan-500/25 border border-cyan-500/40 text-cyan-200 font-mono text-xs font-bold uppercase tracking-wider transition-colors cursor-pointer active:scale-[0.98]"
+            className="px-5 py-2.5 rounded-[var(--radius-control)] bg-cyan-500/15 hover:bg-cyan-500/25 border border-cyan-500/40 text-cyan-200 font-mono text-xs font-bold uppercase tracking-wider transition-colors cursor-pointer active:scale-[0.98]"
           >
             Retry link
           </button>
@@ -332,7 +333,7 @@ export default function Home() {
   // View: Loading Session
   if (excelSession.status === 'loading' && bridge.status === 'standalone') {
     return (
-      <main className="w-screen h-screen bg-slate-950 flex flex-col items-center justify-center gap-3 select-none">
+      <main className="w-screen min-h-[100dvh] h-[100dvh] bg-slate-950 flex flex-col items-center justify-center gap-3 select-none">
         <div className="relative w-10 h-10">
           <div className="absolute inset-0 border-2 border-t-cyan-400 border-r-transparent border-b-transparent border-l-transparent rounded-full animate-spin" />
           <div className="absolute inset-1.5 border-2 border-b-violet-500 border-r-transparent border-t-transparent border-l-transparent rounded-full animate-[spin_1s_linear_infinite_reverse]" />
@@ -347,10 +348,10 @@ export default function Home() {
   // View: Unauthenticated Dimensional Terminal Gate
   if (!identity) {
     return (
-      <main className="relative w-screen h-screen overflow-hidden bg-radial-dark flex flex-col items-center justify-center p-6 select-none">
+      <main className="relative w-screen min-h-[100dvh] h-[100dvh] overflow-hidden bg-radial-dark flex flex-col items-center justify-center p-6 select-none">
         <MultiverseBackground />
 
-        <div className="relative z-10 w-full max-w-md bg-slate-950/70 border border-violet-500/30 rounded-3xl p-8 md:p-10 backdrop-blur-xl shadow-[0_0_60px_rgba(139,92,246,0.15)] text-center flex flex-col items-center">
+        <div className="relative z-10 w-full max-w-md bg-slate-950/70 border border-violet-500/30 rounded-[var(--radius-panel)] p-8 md:p-10 backdrop-blur-xl shadow-[0_0_60px_rgba(139,92,246,0.15)] text-center flex flex-col items-center">
           {/* Top Holographic Flare */}
           <div className="absolute top-0 inset-x-0 h-0.5 bg-linear-to-r from-transparent via-cyan-400 to-transparent shadow-[0_0_15px_rgba(34,211,238,0.8)]" />
 
@@ -376,7 +377,7 @@ export default function Home() {
 
           <button
             onClick={handleLogin}
-            className="group relative w-full flex items-center justify-center gap-3 bg-cyan-400 hover:bg-cyan-300 active:bg-cyan-500 text-slate-950 font-mono font-bold text-sm tracking-wider uppercase px-6 py-3.5 rounded-xl border border-cyan-300/60 transition-colors duration-150 shadow-[0_0_30px_rgba(34,211,238,0.25)] active:scale-[0.98] cursor-pointer select-none"
+            className="group relative w-full flex items-center justify-center gap-3 bg-cyan-400 hover:bg-cyan-300 active:bg-cyan-500 text-slate-950 font-mono font-bold text-sm tracking-wider uppercase px-6 py-3.5 rounded-[var(--radius-control)] border border-cyan-300/60 transition-colors duration-150 shadow-[0_0_30px_rgba(34,211,238,0.25)] active:scale-[0.98] cursor-pointer select-none"
           >
             <svg className="w-5 h-5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" />
@@ -453,7 +454,7 @@ export default function Home() {
               <div className="absolute inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-md p-4 select-none">
                 <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_42%,rgba(239,68,68,0.12)_0%,rgba(139,92,246,0.12)_40%,transparent_70%)] pointer-events-none" />
 
-                <div className="relative w-full max-w-md bg-slate-900/70 border border-violet-500/30 rounded-3xl shadow-[0_0_60px_rgba(139,92,246,0.25)] overflow-hidden p-7 md:p-8 text-center backdrop-blur-xl">
+                <div className="relative w-full max-w-md bg-slate-900/70 border border-violet-500/30 rounded-[var(--radius-panel)] shadow-[0_0_60px_rgba(139,92,246,0.25)] overflow-hidden p-7 md:p-8 text-center backdrop-blur-xl">
                   {/* Top Glowing Red Accent */}
                   <div className="absolute top-0 inset-x-0 h-0.5 bg-linear-to-r from-transparent via-red-500/80 to-transparent shadow-[0_0_15px_rgba(239,68,68,0.8)]" />
 
@@ -483,26 +484,26 @@ export default function Home() {
                   {gameOver.altitude >= gameOver.best && gameOver.altitude > 0 && (
                     <div className="mt-4 inline-flex items-center gap-2 rounded-full border border-cyan-400/40 bg-cyan-950/50 px-4 py-1.5 font-mono text-xs tracking-widest text-cyan-300 uppercase shadow-[0_0_15px_rgba(6,182,212,0.3)]">
                       <span className="w-2 h-2 rounded-full bg-cyan-400 animate-ping" />
-                      ⚡ New Dimensional Record!
+                      New Dimensional Record
                     </div>
                   )}
 
                   {/* Stat Grid */}
                   <div className="mt-6 grid grid-cols-3 gap-3">
-                    <div className="rounded-2xl border border-slate-800/80 bg-slate-950/60 p-4">
+                    <div className="rounded-[var(--radius-panel)] border border-slate-800/80 bg-slate-950/60 p-4">
                       <p className="font-mono text-[10px] tracking-[0.25em] text-slate-400 uppercase">
                         Final Altitude
                       </p>
-                      <p className="mt-1 font-mono font-black text-3xl text-cyan-400">
+                      <p className="mt-1 font-mono font-black text-3xl text-cyan-400 tabular">
                         {gameOver.altitude}
                         <span className="text-sm font-normal text-cyan-500 ml-0.5">m</span>
                       </p>
                     </div>
-                    <div className="rounded-2xl border border-slate-800/80 bg-slate-950/60 p-4">
+                    <div className="rounded-[var(--radius-panel)] border border-slate-800/80 bg-slate-950/60 p-4">
                       <p className="font-mono text-[10px] tracking-[0.25em] text-slate-400 uppercase">
                         Sector Best
                       </p>
-                      <p className="mt-1 font-mono font-black text-3xl text-violet-400">
+                      <p className="mt-1 font-mono font-black text-3xl text-violet-400 tabular">
                         {gameOver.best}
                         <span className="text-sm font-normal text-violet-500 ml-0.5">m</span>
                       </p>
@@ -512,13 +513,13 @@ export default function Home() {
                         a player who never took the risk line sees no coin tile at all,
                         which keeps the system a secret rather than an empty readout. */}
                     {(gameOver.coins ?? 0) > 0 || gameOver.lostCoins > 0 ? (
-                      <div className="rounded-2xl border border-amber-500/25 bg-slate-950/60 p-4">
+                      <div className="rounded-[var(--radius-panel)] border border-amber-500/25 bg-slate-950/60 p-4">
                         <p className="font-mono text-[10px] tracking-[0.25em] text-slate-400 uppercase">
                           Coins
                         </p>
                         <p className="mt-1 flex items-center gap-1.5 font-mono font-black text-3xl text-amber-400">
                           <CoinIcon size={26} />
-                          <span className="tabular-nums">
+                          <span className="tabular">
                             {(gameOver.coins ?? 0).toLocaleString()}
                           </span>
                         </p>
@@ -532,7 +533,7 @@ export default function Home() {
                     ) : (
                       // Keeps the three-column grid intact when the tile is absent,
                       // so the altitude pair does not stretch across the row.
-                      <div className="rounded-2xl border border-slate-800/40 bg-slate-950/30 p-4 flex items-center justify-center">
+                      <div className="rounded-[var(--radius-panel)] border border-slate-800/40 bg-slate-950/30 p-4 flex items-center justify-center">
                         <p className="font-mono text-[10px] tracking-[0.25em] text-slate-600 uppercase text-center leading-relaxed">
                           No coins
                           <br />
@@ -546,16 +547,16 @@ export default function Home() {
                   <div className="mt-7 flex flex-col gap-3">
                     <button
                       onClick={handleRerun}
-                      className="group relative w-full bg-white hover:bg-zinc-100 active:bg-zinc-200 text-zinc-950 px-8 py-3.5 rounded-xl font-mono font-bold text-sm tracking-wider uppercase border border-zinc-200 shadow-sm transition-colors duration-150 active:scale-[0.98] flex items-center justify-center gap-2.5 cursor-pointer select-none"
+                      className="group relative w-full bg-white hover:bg-zinc-100 active:bg-zinc-200 text-zinc-950 px-8 py-3.5 rounded-[var(--radius-control)] font-mono font-bold text-sm tracking-wider uppercase border border-zinc-200 shadow-sm transition-colors duration-150 active:scale-[0.98] flex items-center justify-center gap-2.5 cursor-pointer select-none"
                     >
-                      <span>▶ RE-ENGAGE ASCENT</span>
+                      <span>RE-ENGAGE ASCENT</span>
                       <span className="text-[10px] bg-zinc-200/80 border border-zinc-300 text-zinc-800 px-1.5 py-0.5 rounded font-mono font-semibold">
-                        SPACE / ↵
+                        SPACE
                       </span>
                     </button>
                     <button
                       onClick={handleExitToLauncher}
-                      className="w-full bg-zinc-900/90 hover:bg-zinc-800 active:bg-zinc-950 text-zinc-200 hover:text-white px-8 py-3 rounded-xl font-mono font-semibold text-xs tracking-wider uppercase border border-zinc-800 hover:border-zinc-700 shadow-sm transition-colors duration-150 active:scale-[0.98] flex items-center justify-center gap-2 cursor-pointer select-none"
+                      className="w-full bg-zinc-900/90 hover:bg-zinc-800 active:bg-zinc-950 text-zinc-200 hover:text-white px-8 py-3 rounded-[var(--radius-control)] font-mono font-semibold text-xs tracking-wider uppercase border border-zinc-800 hover:border-zinc-700 shadow-sm transition-colors duration-150 active:scale-[0.98] flex items-center justify-center gap-2 cursor-pointer select-none"
                     >
                       <span>RETURN TO LAUNCHER</span>
                       <span className="text-[10px] bg-zinc-800 border border-zinc-700 text-zinc-400 px-1.5 py-0.5 rounded font-mono font-normal">ESC</span>

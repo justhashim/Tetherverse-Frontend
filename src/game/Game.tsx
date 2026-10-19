@@ -83,11 +83,14 @@ export default function Game({ isActive = true }: GameProps) {
       {/* Cybernetic loading indicator during asset load or initial boot */}
       {!isReady && isActive && (
         <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-slate-950/90 backdrop-blur-md transition-opacity duration-300">
-          <div className="relative w-16 h-16 mb-4">
-            <div className="absolute inset-0 rounded-full border-2 border-cyan-500/20 border-t-cyan-400 animate-spin" />
-            <div className="absolute inset-2 rounded-full border-2 border-violet-500/20 border-b-violet-400 animate-[spin_1.2s_linear_infinite_reverse]" />
-          </div>
-          <p className="font-mono text-xs font-bold text-cyan-400 tracking-[0.25em] uppercase animate-pulse">
+          {/* One spinner, still. The counter-rotating inner ring doubled the
+              moving parts without adding information. */}
+          <div
+              className="w-16 h-16 mb-4 border-2 border-cyan-500/20 border-t-cyan-400 rounded-full animate-spin"
+              role="status"
+              aria-label="Initializing ascent vector"
+          />
+          <p className="font-mono text-xs font-bold text-cyan-400 tracking-[0.25em] uppercase">
             Initializing Ascent Vector...
           </p>
           <p className="font-mono text-[10px] text-slate-500 tracking-widest mt-1 uppercase">

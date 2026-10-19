@@ -13,9 +13,9 @@ export default function ProfileCard({ user, bestAltitude, onLogout }: ProfileCar
     const [imageError, setImageError] = useState(false);
 
     return (
-        <div className="flex items-center gap-3.5 bg-zinc-950/80 border border-zinc-800 hover:border-zinc-700 p-2.5 md:p-3 rounded-xl backdrop-blur-md shadow-sm transition-colors duration-150">
+        <div className="flex items-center gap-3.5 bg-zinc-950/80 border border-zinc-800 hover:border-zinc-700 p-2.5 md:p-3 rounded-[var(--radius-panel)] backdrop-blur-md shadow-sm transition-colors duration-150">
             {/* Avatar Container with solid border */}
-            <div className="relative w-11 h-11 rounded-xl overflow-hidden border border-zinc-800 bg-zinc-900 shrink-0 flex items-center justify-center">
+            <div className="relative w-11 h-11 rounded-[var(--radius-control)] overflow-hidden border border-zinc-800 bg-zinc-900 shrink-0 flex items-center justify-center">
                 {user.image && !imageError ? (
                     <Image
                         src={user.image}
@@ -31,8 +31,10 @@ export default function ProfileCard({ user, bestAltitude, onLogout }: ProfileCar
                         {user.name ? user.name.charAt(0) : 'U'}
                     </div>
                 )}
-                {/* Active node status pip */}
-                <span className="absolute bottom-0.5 right-0.5 w-2 h-2 rounded-full bg-emerald-400 border border-zinc-950" />
+                {/* No status pip. A green dot here asserted an online state the
+                    client never verifies, and the label beside it made the same
+                    unverified claim a second time in words. */}
+
             </div>
 
             {/* User Meta & Action */}
@@ -42,16 +44,12 @@ export default function ProfileCard({ user, bestAltitude, onLogout }: ProfileCar
                         {user.name}
                     </span>
                     {typeof bestAltitude === 'number' && bestAltitude > 0 && (
-                        <span className="font-mono text-[10px] font-bold text-zinc-300 bg-zinc-900 border border-zinc-700 px-1.5 py-0.5 rounded">
+                        <span className="font-mono text-[10px] font-bold text-zinc-300 bg-zinc-900 border border-zinc-700 px-1.5 py-0.5 rounded tabular">
                             {bestAltitude.toLocaleString()}m
                         </span>
                     )}
                 </div>
                 <div className="flex items-center gap-2 mt-0.5">
-                    <span className="font-mono text-[9px] text-emerald-400 uppercase tracking-wider">
-                        NODE // LINKED
-                    </span>
-                    <span className="text-zinc-600 text-[10px]">•</span>
                     <button
                         onClick={onLogout}
                         className="font-mono text-[10px] text-zinc-400 hover:text-rose-400 tracking-wider uppercase transition-colors cursor-pointer"

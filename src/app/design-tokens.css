@@ -1,0 +1,124 @@
+/**
+ * Design tokens for Tetherverse.
+ *
+ * The game has one aesthetic and it is deliberately narrow: a night sky, cyan
+ * instrumentation, and violet only where the multiverse shows through. Everything
+ * else is zinc. These tokens exist so that narrowness is enforced in one place
+ * rather than remembered in fifty.
+ *
+ * Two rules the codebase was breaking before this file existed:
+ *
+ * 1. Radius. Four different radii were in use across the UI with no rule. The
+ *    rule is: panels are soft, controls are tighter, status chips are pills.
+ *    A large panel and a small button should not share a radius, because the
+ *    radius is what tells the eye which is which.
+ *
+ * 2. Layering. z-index was being sprinkled as z-10 through z-55. The scale below
+ *    is the whole vocabulary. Anything outside it needs a comment explaining
+ *    which layer it belongs to.
+ *
+ * Colours are declared as raw values rather than Tailwind theme keys because the
+ * game's palette is intentionally non-standard: `signal` and `rift` are the only
+ * two chromatic accents, and neither maps cleanly onto a stock Tailwind step.
+ */
+
+/* ============================================================================
+   Accents. Two, and no more.
+   ============================================================================
+   `signal` cyan is the player's own presence: altitude, controls, the tether,
+   anything the player causes. `rift` violet is the multiverse: nebulae, rifts,
+   the abyss. A screen showing both is showing the two halves of the game.
+
+   Amber belongs to coins and risk, and rose to failure. Those are semantic, not
+   brand, so they are allowed to appear only where they mean something. */
+:root {
+  --signal: #22d3ee;
+  --signal-dim: #0e7490;
+  --rift: #a855f7;
+  --rift-dim: #6b21a8;
+
+  /* Coin currency, matched to the sprite Coin.ts generates. */
+  --coin: #ffc94d;
+
+  /* ==========================================================================
+     Radii. The documented rule, applied everywhere.
+     ========================================================================== */
+  --radius-control: 0.5rem;   /* buttons, inputs: 8px  */
+  --radius-panel: 1rem;       /* cards, panels, HUD: 16px  */
+  --radius-chip: 9999px;      /* status chips, pips: full  */
+
+  /* ==========================================================================
+     Layers. The whole vocabulary.
+     ==========================================================================
+     z-0   the cosmic background, which nothing covers
+     z-10  in-flow layout: the menu, sitting above the background
+     z-20  floating chrome within the menu: top bar, footer
+     z-30  the game stage. Above the menu so the canvas is never occluded, below
+           the modals so a panel opens over a live run
+     z-40  in-game HUD and the intro click-catcher
+     z-50  modal scrim, its panel, and the intro overlay
+     z-60  transient overlays: toasts, pickup notices
+     Phaser renders into its own canvas and is composited by z-order in the
+     scene, not by CSS, so it does not appear here. */
+}
+
+/* ============================================================================
+   Base
+   ============================================================================ */
+
+/* ============================================================================
+   Motion
+   ============================================================================
+   Two curves only. `out` is the default for anything entering; `spring` is for
+   anything the player directly caused, where a little overshoot reads as
+   physical response. Durations stay between 150 and 800ms: below 150 the
+   transition is not perceived, above 800 it feels like the game is waiting. */
+:root {
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --duration-fast: 150ms;
+  --duration-normal: 250ms;
+  --duration-slow: 500ms;
+}
+
+/* ============================================================================
+   Focus
+   ============================================================================
+   The game is keyboard-first: hold space to tether, release to launch, escape to
+   abort. A focus ring that is invisible here is not a minor accessibility gap,
+   it is a gap in the primary control scheme. */
+:focus-visible {
+  outline: 2px solid var(--signal);
+  outline-offset: 2px;
+  border-radius: var(--radius-control);
+}
+
+/* Remove the ring for pointer users, who get hover and active feedback instead.
+   Keyboard users keep it, which is the entire point of :focus-visible. */
+:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* ============================================================================
+   Reduced motion
+   ============================================================================
+   Every animation in the game is decorative: menu entrances, the drifting
+   background, panel transitions, pulsing status pips. None of it carries
+   information that is not also present in text, so all of it collapses to a
+   static state without loss.
+
+   Framer's `whileHover` and `whileTap` are handled by MotionConfig in the page
+   root. This block covers the CSS `animate-*` utilities and keyframes, which
+   know nothing about that setting.
+
+   Duration is 0.01ms rather than 0 so `animationend` still fires and anything
+   waiting on it does not hang. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

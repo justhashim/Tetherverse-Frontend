@@ -58,7 +58,7 @@ export default function IntroVideo({ onComplete, onSkip }: IntroVideoProps) {
                 onEnded={onComplete}
                 preload="auto"
             />
-            <div className="absolute bottom-8 right-8 z-55" data-skip-btn>
+            <div className="absolute bottom-8 right-8 z-50" data-skip-btn>
                 <SkipButton onClick={onSkip} />
             </div>
         </div>

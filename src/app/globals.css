@@ -1,8 +1,13 @@
 @import "tailwindcss";
+@import "./design-tokens.css";
 
+/* The game is dark-only by design: a night sky with cyan instrumentation on it.
+   There is no light theme, because a light version of this would be a different
+   product rather than a different skin. The old prefers-color-scheme block
+   implied one existed. */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #020408;
+  --foreground: #e8edf5;
 }
 
 @theme inline {
@@ -12,17 +17,27 @@
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  /* Geist, not Arial.
+
+     This used to hard-code Arial, which silently overrode the Geist that
+     next/font loads: the font was downloaded, the variable was defined, and
+     nothing ever referenced it. Tailwind's preflight sets font-family on html,
+     and this rule targeted body, so it won. Dropping it lets the `font-sans`
+     and `font-mono` utilities resolve to the real faces. */
+  font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+}
+
+/* Every numeric readout in the game is tabular: altitude, coins, rank, the
+   leaderboard column. Proportional digits make a changing number jitter, which
+   reads as noise during a fast climb.
+
+   `.tabular` rather than Tailwind's `tabular-nums`, because Tailwind's variant is
+   a class you have to remember and this one is what the tokens file documents. */
+.tabular {
+  font-variant-numeric: tabular-nums;
 }
 
 @layer utilities {
@@ -54,28 +69,4 @@ body {
 
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
   background: rgba(6, 182, 212, 0.4);
-}
-/* ============================================================================
-   Reduced motion
-   ============================================================================
-   Every animation in the game is decorative: menu entrances, the drifting
-   background, panel transitions, pulsing status dots. None of it carries
-   information that is not also present in text, so all of it collapses to a
-   static state without loss.
-
-   This block covers the CSS `animate-*` utilities and the shimmer keyframes.
-   Framer's `whileHover` and `whileTap` are handled separately by its own
-   `useReducedMotion`, which disables them without a re-render.
-
-   The duration is 0.01ms rather than 0 so that `animationend` still fires and
-   any logic waiting on it does not hang. */
-@media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
-    scroll-behavior: auto !important;
-  }
 }
