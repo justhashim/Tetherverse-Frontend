@@ -44,11 +44,48 @@ body {
   .bg-radial-dark {
     background: radial-gradient(circle at 50% 50%, #0b0f19 0%, #020408 100%);
   }
+
+  /* Unframed instrumentation has no opaque panel to keep it readable, so the
+     readout shadows itself. The token lives in design-tokens.css next to the
+     rest of the visual language; this is just the class that applies it. */
+  .text-readout {
+    text-shadow: var(--shadow-readout);
+  }
 }
 
 @keyframes shimmer {
   100% {
     transform: translateX(100%);
+  }
+}
+
+/* ============================================================================
+   Menu motion
+   ============================================================================
+   One keyframe, and it is the only perpetual animation in the product. The
+   disc's halo is the single control in the game, it is the only cyan on the
+   screen, and a slow ring leaving it is the one piece of motion that is doing
+   a job: it says press here.
+
+   It collapses under prefers-reduced-motion via the block in design-tokens.css,
+   which sets duration to 0.01ms and iteration to 1 - the ring ends on its first
+   frame rather than hanging.
+
+   The skies behind it do not use keyframes at all. Four drifting environments
+   cannot be expressed as transforms on spans without becoming a fog of
+   elements, and a fog of elements is exactly what a phone cannot afford
+   underneath a menu; they are drawn on a canvas instead. */
+@keyframes breathe {
+  0% {
+    transform: scale(0.98);
+    opacity: 0;
+  }
+  30% {
+    opacity: 0.45;
+  }
+  100% {
+    transform: scale(1.45);
+    opacity: 0;
   }
 }
 
