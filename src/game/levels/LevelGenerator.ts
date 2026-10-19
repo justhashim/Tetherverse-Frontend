@@ -2,25 +2,11 @@ import Phaser from "phaser";
 import { BasePlatform } from "../terrain/BasePlatform";
 import { CosmicHazard } from "../terrain/CosmicHazard";
 import { Coin } from "../terrain/Coin";
-import { GAME_CONSTANTS, tierForAltitude, type DifficultyTier } from "../config/game-constants";
+import { GAME_CONSTANTS, type DifficultyProfile, type PatternId } from "../config/game-constants";
+import { hazardStateForAltitude, profileForAltitude } from "../config/difficulty";
 import { stratumForAltitude } from "../config/strata";
 import { COLLISION_CHANNELS } from "../config/physics-channels";
 import { createSeededRng, type Rng } from "./seeded-random";
-
-export type PatternId =
-    | "STRAIGHT_ASCENT"
-    | "LEFT_SWING"
-    | "RIGHT_SWING"
-    | "ZIGZAG"
-    | "WIDE_SWING"
-    | "TIGHT_PRECISION"
-    | "HOOK_CHAIN"
-    | "VERTICAL_SHAFT"
-    | "OFFSET_LANDING"
-    | "LONG_RELEASE"
-    | "HIGH_RISK_SHORTCUT"
-    | "SWITCHBACK"
-    | "RECOVERY_ROUTE";
 
 type Beat =
     | "SAFE"
@@ -31,33 +17,13 @@ type Beat =
     | "MAJOR_CLIMB";
 
 /**
- * Which difficulty band an altitude falls in, ordered easiest to hardest.
+ * How a rhythm of movement bends the profile of the mountain.
  *
- * Everything that ramps with difficulty reads this rather than raw altitude, so
- * moving a boundary in GAME_CONSTANTS.ALTITUDE moves the platform shapes, the
- * crumbling rolls and the hazard density together.
+ * A pattern is a shape of climb rather than a number, so it scales the
+ * profile the tier is holding rather than replacing it: a wide swing asks
+ * more of the reach, a tight one asks for a narrower ledge, and a chain puts
+ * two anchors in the air where there would otherwise be one.
  */
-export interface DifficultyProfile {
-    widthMin: number;
-    widthMax: number;
-    heightMin: number;
-    heightMax: number;
-    stepMin: number;
-    stepMax: number;
-    idealGap: number;
-    horizontalRatio: number;
-    idealHorizontal: number;
-    anchorLiftMin: number;
-    anchorLiftMax: number;
-    anchorOffsetMax: number;
-    recoveryChance: number;
-    riskChance: number;
-    reliefChance: number;
-    chainLength: number;
-    voidMargin: number;
-    patterns: readonly PatternId[];
-}
-
 interface PatternSpec {
     spread: number;            // horizontal spread preference
     stepScale: number;         // vertical gap rhythm multiplier
@@ -134,7 +100,6 @@ export class LevelGenerator {
     private committedCount: number = 0;
     private lastPattern: PatternId | null = null;
     private currentProfile: DifficultyProfile;
-    private currentAltitudeMeters: number = 0;
     /**
      * Highest altitude reached this run. Difficulty is selected from this rather
      * than from the live altitude, so falling never makes the mountain kinder.
@@ -159,7 +124,7 @@ export class LevelGenerator {
         this.maxReach = GAME_CONSTANTS.PROCEDURAL.PLATFORM_REACH;
         this.ropeLength = GAME_CONSTANTS.PROCEDURAL.ROPE_LENGTH;
         this.groundReferenceY = groundReferenceY;
-        this.currentProfile = this.getProfile(0);
+        this.currentProfile = profileForAltitude(0);
 
         // Handoff platform: positioned where Hook 4's swing arc lands (~2150, groundReferenceY - 780)
         const handoffPlatform = new BasePlatform(
@@ -177,16 +142,8 @@ export class LevelGenerator {
         this.prevHeight = 35;
     }
 
-    public get headYValue(): number {
-        return this.headY;
-    }
-
     public get voidMargin(): number {
         return this.currentProfile.voidMargin;
-    }
-
-    public get climbDirection(): number {
-        return this.currentDirection;
     }
 
     /**
@@ -222,17 +179,12 @@ export class LevelGenerator {
         return 1; // Default to standard forward progression
     }
 
-    public get platformCount(): number {
-        return this.platforms.length;
-    }
-
     // --- Public update: keep a distance-based lookahead ahead, then cull behind. ---
     public update(playerX: number, playerY: number, altitudeMeters: number): void {
-        this.currentAltitudeMeters = altitudeMeters;
         if (altitudeMeters > this.peakAltitudeMeters) {
             this.peakAltitudeMeters = altitudeMeters;
         }
-        this.currentProfile = this.getProfile(this.peakAltitudeMeters);
+        this.currentProfile = profileForAltitude(this.peakAltitudeMeters);
 
         const proc = GAME_CONSTANTS.PROCEDURAL;
         // Distance-based lookahead, NOT a fixed platform count. TARGET_SPACING only
@@ -249,30 +201,6 @@ export class LevelGenerator {
         }
 
         this.cull(playerY);
-    }
-
-    // --- Death-void support: lowest active platform below a Y coordinate. ---
-    public getLowestPlatformBelow(y: number): BasePlatform | null {
-        let lowest: BasePlatform | null = null;
-        for (const p of this.platforms) {
-            if (!p || !p.active || !p.body) continue;
-            if (p.y > y && (!lowest || p.y > lowest.y)) {
-                lowest = p;
-            }
-        }
-        return lowest;
-    }
-
-    // --- Returns the lowest active platform in the world (maximum Y) ---
-    public getLowestActivePlatform(): BasePlatform | null {
-        let lowest: BasePlatform | null = null;
-        for (const p of this.platforms) {
-            if (!p || !p.active || !p.body) continue;
-            if (!lowest || p.y > lowest.y) {
-                lowest = p;
-            }
-        }
-        return lowest;
     }
 
     // --- Tutorial hook layout (preserved from the original game). ---
@@ -429,8 +357,14 @@ export class LevelGenerator {
             this.maxReach * this.maxReach - stepUp * stepUp
         )));
 
+        // The tier decides how much of that reach may be spent sideways.
+        // A climb that only uses half of it is a climb straight up the
+        // mountain, which is what the tutorial is for; up high the swing is
+        // the difficulty, so the climb spends nearly all of it.
+        const sidewaysReach = Math.floor(maxHorizontalReach * profile.horizontalRatio);
+
         let minH = proc.MIN_HORIZONTAL_GAP;
-        let usableMaxH = Math.min(proc.MAX_HORIZONTAL_GAP, Math.max(minH, maxHorizontalReach));
+        let usableMaxH = Math.min(proc.MAX_HORIZONTAL_GAP, Math.max(minH, sidewaysReach));
 
         // Chimney climbing for VERTICAL_SHAFT
         if (pattern === "VERTICAL_SHAFT") {
@@ -620,19 +554,25 @@ export class LevelGenerator {
         profile: DifficultyProfile,
         spec: PatternSpec
     ): void {
-        // Crumbling and hazards follow the difficulty band rather than raw altitude, so
-        // they stay in step with the tier boundaries when those move.
-        const tier = this.tierFor(this.peakAltitudeMeters);
-
+        // Crumbling and hazards follow the difficulty dial rather than raw
+        // altitude, so they stay in step with the shape of the mountain when
+        // the boundaries move.
+        //
         // Risk platforms are where a run is meant to be lost, so they crumble
         // sooner and more often than ordinary ground. Recovery platforms are the
         // safety net and must never crumble.
+        //
+        // The chances come from the dial rather than from the tier, so a ledge
+        // crumbles at the rate the mountain is crumbling at the altitude the
+        // run has reached, and the tutorial's zero holds until the climb has
+        // actually left the tutorial.
+        const hazards = hazardStateForAltitude(this.peakAltitudeMeters);
+
         let isCrumbling = false;
         if (spec.risk) {
-            isCrumbling = tier !== 'TUTORIAL'
-                && this.rng() < GAME_CONSTANTS.HAZARD.riskCrumble[tier];
-        } else if (!spec.recovery && tier !== 'TUTORIAL') {
-            isCrumbling = this.rng() < GAME_CONSTANTS.HAZARD.crumble[tier];
+            isCrumbling = this.rng() < hazards.riskCrumble;
+        } else if (!spec.recovery) {
+            isCrumbling = this.rng() < hazards.crumble;
         }
 
         const platform = new BasePlatform(
@@ -701,14 +641,23 @@ export class LevelGenerator {
     }
 
     private maybeSpawnHazard(prevX: number, prevY: number, candX: number, candY: number): void {
-        const tier = this.tierFor(this.peakAltitudeMeters);
-        if (tier === 'TUTORIAL') return;
+        const hazards = hazardStateForAltitude(this.peakAltitudeMeters);
 
         const dist = Math.hypot(candX - prevX, candY - prevY);
         if (dist < GAME_CONSTANTS.HAZARD.minGap) return;
 
-        if (this.rng() > GAME_CONSTANTS.HAZARD.chance[tier]) return;
+        // The density is a number of asteroids, not a coin flip, so a world
+        // with more hazards in it can be more hazardous. The whole number is
+        // always there and the remainder is the chance of one more.
+        const whole = Math.floor(hazards.density);
+        const remainder = hazards.density - whole;
 
+        for (let i = 0; i < whole + (this.rng() < remainder ? 1 : 0); i++) {
+            this.spawnHazard(prevX, prevY, candX, candY);
+        }
+    }
+
+    private spawnHazard(prevX: number, prevY: number, candX: number, candY: number): void {
         // Position mid-air between platforms, offset slightly from direct line of flight
         const midX = (prevX + candX) / 2 + this.between(-30, 30);
         const midY = (prevY + candY) / 2 + this.between(-25, 25);
@@ -876,20 +825,6 @@ export class LevelGenerator {
     //  Difficulty selection
     // =====================================================================
 
-    /**
-     * The band for an altitude. Everything that ramps with difficulty reads this
-     * rather than raw altitude, so moving a boundary in GAME_CONSTANTS.ALTITUDE
-     * moves the platform shapes, the crumbling rolls and the hazard density
-     * together rather than leaving them stranded at the old numbers.
-     */
-    private tierFor(altitudeMeters: number): DifficultyTier {
-        return tierForAltitude(altitudeMeters);
-    }
-
-    private getProfile(altitudeMeters: number): DifficultyProfile {
-        return GAME_CONSTANTS.DIFFICULTY[this.tierFor(altitudeMeters)] as DifficultyProfile;
-    }
-
     public getZoneName(altitudeMeters: number): string {
         return stratumForAltitude(altitudeMeters);
     }
@@ -950,12 +885,10 @@ export class LevelGenerator {
         if (forceUnstable !== undefined) {
             isUnstable = forceUnstable;
         } else {
-            const tier = this.tierFor(this.peakAltitudeMeters);
-            if (tier !== 'TUTORIAL') {
-                // An unstable anchor gives way on contact, so it is the same kind of
-                // decision as a crumbling platform: rare early, common high up.
-                isUnstable = this.rng() < GAME_CONSTANTS.HAZARD.unstableAnchor[tier];
-            }
+            // An unstable anchor gives way on contact, so it is the same kind of
+            // decision as a crumbling platform: rare early, common high up.
+            const hazards = hazardStateForAltitude(this.peakAltitudeMeters);
+            isUnstable = this.rng() < hazards.unstableAnchor;
         }
 
         const label = isUnstable ? 'HookAnchor_Unstable' : 'HookAnchor';
@@ -999,11 +932,6 @@ export class LevelGenerator {
      */
     public getPlatforms(): readonly BasePlatform[] {
         return this.platforms;
-    }
-
-    /** Coins the scene collects on contact. */
-    public getCoins(): readonly Coin[] {
-        return this.coins;
     }
 
     /** Drops a collected coin so it stops colliding and stops being drawn. */
