@@ -6,6 +6,12 @@
  * the platform shapes, the crumbling rolls, the hazard density, the weather and
  * the safety net together. Difficulty is one dial with many faces, not five
  * dials that have to be turned in step.
+ *
+ * The bands are rungs on a ladder rather than steps. A rung is an altitude and
+ * the mountain as it stands there; the ground between two rungs is a blend of
+ * the two, because a player who crosses a boundary must not meet a wall. The
+ * blend lives in ./difficulty, which is the only thing that reads this table
+ * and the only thing that decides what the mountain is at a given altitude.
  */
 
 /**
@@ -15,6 +21,10 @@
  * gates decide how many hops a tier lasts. They are deliberately close
  * together: the mountain is meant to be over before a player has time to settle
  * into a rhythm, and the handcrafted tutorial only covers the first 80m.
+ *
+ * These are the rungs. A rung holds the authored shape of the mountain at that
+ * altitude, and the climb between two rungs is a blend of the two, so the
+ * numbers here are the numbers the mountain passes through on its way up.
  */
 export const ALTITUDE_ZONES = {
     INTERMEDIATE_ZONE: 80,    // Altitude (m) where the Intermediate tier begins
@@ -22,6 +32,105 @@ export const ALTITUDE_ZONES = {
     EXPERT_ZONE: 520,         // Altitude (m) where the Expert tier begins
     ENDLESS_ZONE: 1000,       // Altitude (m) where the Endless tier begins
 } as const;
+
+/**
+ * The vocabulary of the mountain's movement.
+ *
+ * A pattern is a rhythm rather than a number, so it cannot be blended the way
+ * the rest of the profile is: a set either has a pattern in it or it does not.
+ * The pattern list belongs to the tier, which changes at a rung, and the
+ * numbers arrive at the same rung - so the vocabulary and the shape of the
+ * mountain always change hands together.
+ */
+export type PatternId =
+    | "STRAIGHT_ASCENT"
+    | "LEFT_SWING"
+    | "RIGHT_SWING"
+    | "ZIGZAG"
+    | "WIDE_SWING"
+    | "TIGHT_PRECISION"
+    | "HOOK_CHAIN"
+    | "VERTICAL_SHAFT"
+    | "OFFSET_LANDING"
+    | "LONG_RELEASE"
+    | "HIGH_RISK_SHORTCUT"
+    | "SWITCHBACK"
+    | "RECOVERY_ROUTE";
+
+/**
+ * The shape of the mountain at one altitude.
+ *
+ * Every field here is a face of the same dial, and they are read together:
+ * moving one boundary in ALTITUDE moves all of them at once, which is the
+ * whole point of keeping them in one table.
+ */
+export interface DifficultyProfile {
+    widthMin: number;
+    widthMax: number;
+    heightMin: number;
+    heightMax: number;
+    stepMin: number;
+    stepMax: number;
+    idealGap: number;
+    horizontalRatio: number;
+    idealHorizontal: number;
+    anchorLiftMin: number;
+    anchorLiftMax: number;
+    recoveryChance: number;
+    riskChance: number;
+    reliefChance: number;
+    chainLength: number;
+    voidMargin: number;
+    patterns: readonly PatternId[];
+}
+
+/**
+ * How likely the things that end a run are to be there.
+ *
+ * A presence rather than a shape: a crumbling ledge, a patrolling asteroid, an
+ * anchor that gives way. Blended the same way the profile is, so a hazard
+ * arrives at the same rate the mountain it is hiding in gets worse.
+ */
+export interface HazardState {
+    /** How many hazards a gap carries, on average. */
+    density: number;
+    /** Chance an ordinary ledge crumbles under a footfall. */
+    crumble: number;
+    /** Chance a ledge on the risk line crumbles. */
+    riskCrumble: number;
+    /** Chance a hook anchor gives way when it is used. */
+    unstableAnchor: number;
+}
+
+/**
+ * The weather at one altitude.
+ *
+ * The wind pushes sideways and the surge pushes down. Neither is large, but
+ * they arrive at the exact moment the player is trying to read a long
+ * release, which is what makes a high-altitude run feel different from a
+ * low one rather than merely longer.
+ */
+export interface EnvironmentState {
+    wind: number;
+    windFrequency: number;
+    surge: number;
+}
+
+/**
+ * The bands of difficulty, in order.
+ *
+ * A tier is chosen from the highest altitude a run has reached rather than the
+ * altitude it is at, so falling never makes the mountain kinder.
+ */
+export const DIFFICULTY_TIERS = [
+    'TUTORIAL',
+    'INTERMEDIATE',
+    'HARD',
+    'EXPERT',
+    'ENDLESS',
+] as const;
+
+export type DifficultyTier = typeof DIFFICULTY_TIERS[number];
 
 export const GAME_CONSTANTS = {
     PLAYER: {
@@ -65,6 +174,34 @@ export const GAME_CONSTANTS = {
          */
         SPEED_THRESHOLD: 5,
     },
+    /**
+     * The tether, and what it costs to hurt it.
+     *
+     * The tether is the only tool the player has and the only thing they are
+     * holding, so it is where a consequence belongs: the damage is on the
+     * rope in their hands, not on a number they are not looking at. A frayed
+     * rope is a longer rope - it pays out under the load - so the swing it
+     * holds is a bigger, lower arc and the release comes from further down.
+     *
+     * The player is not killed for hitting something. They are handed a worse
+     * swing for the next ten seconds, which is a punishment they can climb
+     * out of, and a rope that re-braids itself afterwards.
+     */
+    TETHER: {
+        /** How much one impact frays the rope. Three of them is the worst of it. */
+        frayPerHit: 0.34,
+        /** The most the rope can be frayed. */
+        maxFray: 1,
+        /** How much longer the rope is when it is frayed all the way, as a fraction. */
+        stretchAtMaxFray: 0.35,
+        /**
+         * How fast the rope re-braids itself, in frays per second.
+         *
+         * Slow on purpose. The damage has to outlast the swing it happened
+         * in, or it is not a consequence but a hiccup.
+         */
+        repairPerSecond: 0.05,
+    },
     WORLD: {
         /**
          * Downward acceleration.
@@ -73,14 +210,30 @@ export const GAME_CONSTANTS = {
          * reading a fast arc rather than riding a slow one.
          */
         GRAVITY_Y: 1.4,
+        /**
+         * How tall the world is, in pixels.
+         *
+         * The climb has no ceiling. The score column is a 32-bit integer, so
+         * the tallest run the server will keep is 2,147,483,647m, which at
+         * 10px to the metre is 2.1e10 pixels above the ground - and the world
+         * has to be able to hold a player who gets there. The walls are the only
+         * part of the Matter world with an extent, so they are drawn at a
+         * height no run will reach: their job is to stop a player who has
+         * drifted sideways from leaving the mountain, and they have to do that
+         * at every altitude.
+         */
+        BOUNDS_HEIGHT: 2e11,
+        /**
+         * The tallest climb the server will store, in metres.
+         *
+         * The altitude itself is a plain number and keeps counting past this,
+         * but a score is an integer column and a value that does not fit in it
+         * is a score that was never saved. The run reports the truth; the
+         * submission is the part that has to fit.
+         */
+        MAX_ALTITUDE_METERS: 2147483647,
     },
     DEATH: {
-        /**
-         * How far below the bottom of the camera the player must fall before the
-         * run ends. Small, because a player who has dropped off the bottom of
-         * the screen is not coming back.
-         */
-        cameraMargin: 10,
         /**
          * Height, in metres, that counts as having climbed.
          *
@@ -96,7 +249,6 @@ export const GAME_CONSTANTS = {
         GENERATION_AHEAD: 1800,         // Distance-based lookahead kept above the player
         TARGET_SPACING: 200,            // Desired spacing between platforms
         MIN_FUTURE_PLATFORMS: 6,        // Minimum future platforms kept alive ahead
-        GENERATION_WIDTH: 3000,         // Dynamic generation corridor width
         MIN_VERTICAL_GAP: 120,          // Minimum vertical separation between route platforms
         MAX_VERTICAL_GAP: 270,          // Maximum vertical separation
         MIN_HORIZONTAL_GAP: 80,         // Minimum sideways travel per platform (allows tighter vertical ascents)
@@ -108,7 +260,6 @@ export const GAME_CONSTANTS = {
         MAX_GENERATED_PER_FRAME: 4,     // Work cap per frame
         CULL_DISTANCE: 3000,            // Destroy platforms/hooks this far below the player
     },
-    ALTITUDE: ALTITUDE_ZONES,
     DIFFICULTY: {
         // Width ranges are the BasePlatform width parameter (~visual width / 2).
         // Every band is hard-capped by PROCEDURAL.PLATFORM_REACH so a tier can never
@@ -121,7 +272,6 @@ export const GAME_CONSTANTS = {
             horizontalRatio: 0.50,                  // fraction of reach usable sideways
             idealHorizontal: 120,                   // horizontal score target
             anchorLiftMin: 140, anchorLiftMax: 200,
-            anchorOffsetMax: 40,
             recoveryChance: 0.30,                   // authored recovery riders
             riskChance: 0,                          // tutorial never introduces risk
             reliefChance: 1,                        // every breather slot is a real breather
@@ -143,7 +293,6 @@ export const GAME_CONSTANTS = {
             horizontalRatio: 0.72,
             idealHorizontal: 145,
             anchorLiftMin: 175, anchorLiftMax: 255,
-            anchorOffsetMax: 90,
             recoveryChance: 0.10,                   // the safety net starts thinning out
             riskChance: 1,
             reliefChance: 0.8,
@@ -169,7 +318,6 @@ export const GAME_CONSTANTS = {
             horizontalRatio: 0.85,
             idealHorizontal: 158,
             anchorLiftMin: 205, anchorLiftMax: 305,
-            anchorOffsetMax: 130,
             recoveryChance: 0.04,                   // a missed jump is now usually a lost run
             riskChance: 1,
             reliefChance: 0.55,
@@ -195,7 +343,6 @@ export const GAME_CONSTANTS = {
             horizontalRatio: 0.92,
             idealHorizontal: 168,
             anchorLiftMin: 235, anchorLiftMax: 335,
-            anchorOffsetMax: 160,
             recoveryChance: 0.02,                   // the net is all but gone
             riskChance: 1,
             reliefChance: 0.3,
@@ -222,7 +369,6 @@ export const GAME_CONSTANTS = {
             horizontalRatio: 0.98,
             idealHorizontal: 178,
             anchorLiftMin: 245, anchorLiftMax: 345,
-            anchorOffsetMax: 180,
             recoveryChance: 0,                      // no safety net at all
             riskChance: 1,
             reliefChance: 0.12,
@@ -241,14 +387,62 @@ export const GAME_CONSTANTS = {
                 'RECOVERY_ROUTE',
             ] as const,
         },
+    } satisfies Record<DifficultyTier, DifficultyProfile>,
+    /**
+     * The roof of the climb.
+     *
+     * The ladder cannot climb for ever, and the shape is the reason. A ledge
+     * narrower than the player cannot be landed on at all, so by the time the
+     * mountain reaches the roof the width has run out of room and the safety
+     * net and the void and the weather are already at their worst.
+     *
+     * What is left is how much of the mountain is trying to kill you at once,
+     * and that has plenty of room left in it. These are the numbers the climb
+     * is heading for, and the climb approaches them asymptotically: the
+     * mountain never quite stops getting worse and never becomes unwinnable.
+     *
+     * Only the dials that still have somewhere to go are listed. Anything
+     * missing from here holds at the Endless value, which is how the shape
+     * says that it has run out.
+     */
+    ROOF: {
+        /**
+         * The scale of the approach, in metres.
+         *
+         * The climb is about halfway to the cruel end a couple of thousand
+         * metres above the roof, and the rest of the way is asymptotic: the
+         * mountain never quite stops getting worse and never becomes
+         * unwinnable.
+         */
+        reachMetres: 2000,
+        profile: {
+            widthMax: 34,                          // the narrow end is already as narrow as it can be
+            heightMin: 18, heightMax: 26,         // thinner ledges, less to land on
+            stepMin: 200, stepMax: 268,           // longer flights, less room to correct a miss
+            idealGap: 245,
+            horizontalRatio: 1,
+            idealHorizontal: 210,
+            anchorLiftMin: 260, anchorLiftMax: 360,
+            recoveryChance: 0,                     // there was never a net up here
+            riskChance: 1,
+            reliefChance: 0,                       // no breather at all
+            chainLength: 6,                        // longer between the beats
+            voidMargin: 26,                        // the void is under your feet
+        } satisfies Partial<DifficultyProfile>,
+        hazard: {
+            density: 1.4,                          // every gap, and some of them twice
+            crumble: 0.55,
+            riskCrumble: 0.85,
+            unstableAnchor: 1,                     // every anchor lets go
+        } satisfies Partial<HazardState>,
+        environment: {
+            wind: 0.0032,
+            windFrequency: 0.0034,
+            surge: 0.0019,
+        } satisfies Partial<EnvironmentState>,
     },
     /**
      * Weather, per tier.
-     *
-     * The wind pushes sideways and the surge pushes down. Neither is large, but
-     * they arrive at the exact moment the player is trying to read a long
-     * release, which is what makes a high-altitude run feel different from a
-     * low one rather than merely longer.
      *
      * Keyed to the tier, so this and the platform shapes change together.
      */
@@ -258,7 +452,7 @@ export const GAME_CONSTANTS = {
         HARD: { wind: 0.0010, windFrequency: 0.0016, surge: 0.0003 },
         EXPERT: { wind: 0.0014, windFrequency: 0.0020, surge: 0.0006 },
         ENDLESS: { wind: 0.0018, windFrequency: 0.0024, surge: 0.0009 },
-    },
+    } satisfies Record<DifficultyTier, EnvironmentState>,
     /**
      * How likely the things that end a run are to be there.
      *
@@ -271,8 +465,15 @@ export const GAME_CONSTANTS = {
      * the player has been taught how to fight.
      */
     HAZARD: {
-        /** Chance a gap long enough to cross carries a patrolling hazard. */
-        chance: { TUTORIAL: 0, INTERMEDIATE: 0.40, HARD: 0.40, EXPERT: 0.65, ENDLESS: 0.85 },
+        /**
+         * How many patrolling hazards a gap carries, on average.
+         *
+         * A number rather than a chance, so that a world with more hazards
+         * in it can be more hazardous without the number running out of room:
+         * 0.4 means four gaps in ten carry one, and 1.4 means every gap
+         * carries one and some of them carry two.
+         */
+        density: { TUTORIAL: 0, INTERMEDIATE: 0.40, HARD: 0.40, EXPERT: 0.65, ENDLESS: 0.85 },
         /** Shortest gap that can hold a hazard. Shorter gaps cannot be patrolled safely. */
         minGap: 150,
         /** Chance an ordinary ledge crumbles under a footfall. */
@@ -288,24 +489,15 @@ export const GAME_CONSTANTS = {
          * comfortably. The swing has to be read, not waited out.
          */
         unstableDurationMs: 1600,
+    } satisfies {
+        density: Record<DifficultyTier, number>;
+        minGap: number;
+        crumble: Record<DifficultyTier, number>;
+        riskCrumble: Record<DifficultyTier, number>;
+        unstableAnchor: Record<DifficultyTier, number>;
+        unstableDurationMs: number;
     },
 };
-
-/**
- * The bands of difficulty, in order.
- *
- * A tier is chosen from the highest altitude a run has reached rather than the
- * altitude it is at, so falling never makes the mountain kinder.
- */
-export const DIFFICULTY_TIERS = [
-    'TUTORIAL',
-    'INTERMEDIATE',
-    'HARD',
-    'EXPERT',
-    'ENDLESS',
-] as const;
-
-export type DifficultyTier = typeof DIFFICULTY_TIERS[number];
 
 /** The band an altitude falls in. */
 export function tierForAltitude(altitudeMeters: number): DifficultyTier {
