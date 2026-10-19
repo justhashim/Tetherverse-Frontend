@@ -57,7 +57,7 @@ async function verifyAccessToken(token: string | null): Promise<ExcelUser | null
 
 function storeTokens(accessToken: string, refreshToken?: string): void {
     sessionStorage.setItem(ACCESS_TOKEN_KEY, accessToken);
-    window.__summitJackAuthToken = accessToken;
+    window.__tetherverseAuthToken = accessToken;
     if (refreshToken) {
         sessionStorage.setItem(REFRESH_TOKEN_KEY, refreshToken);
     }
@@ -66,7 +66,7 @@ function storeTokens(accessToken: string, refreshToken?: string): void {
 function clearTokens(): void {
     sessionStorage.removeItem(ACCESS_TOKEN_KEY);
     sessionStorage.removeItem(REFRESH_TOKEN_KEY);
-    window.__summitJackAuthToken = null;
+    window.__tetherverseAuthToken = null;
 }
 
 export function useExcelSession() {

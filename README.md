@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://capsule-render.vercel.app/api?type=waving&height=220&color=0:0F172A,100:2563EB&text=Summit%20Jack&fontColor=FFFFFF&fontSize=60&animation=fadeIn" />
+  <img src="https://capsule-render.vercel.app/api?type=waving&height=220&color=0:0F172A,100:2563EB&text=Tetherverse&fontColor=FFFFFF&fontSize=60&animation=fadeIn" />
 </p>
 
 <p align="center">
@@ -17,7 +17,7 @@
 
 ## About
 
-**Summit Jack** is a 2D platforming game built around momentum, precision, and player mastery.
+**Tetherverse** is a 2D platforming game built around momentum, precision, and player mastery.
 
 Using a custom pivot mechanic powered by Matter.js physics, players swing, launch, and traverse challenging terrain through skillful movement rather than scripted actions. Every jump, release, and launch carries consequences, rewarding precision and experimentation.
 
@@ -38,7 +38,7 @@ Using a custom pivot mechanic powered by Matter.js physics, players swing, launc
 
 > Movement should feel earned.
 
-Summit Jack is designed around player control and mechanical expression. The environment is not simply navigated; it is mastered through timing, trajectory management, and an understanding of momentum.
+Tetherverse is designed around player control and mechanical expression. The environment is not simply navigated; it is mastered through timing, trajectory management, and an understanding of momentum.
 
 Every successful traversal is the result of player skill interacting with a simulated physical world.
 

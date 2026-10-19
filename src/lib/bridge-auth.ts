@@ -20,7 +20,7 @@ export interface BridgeUser {
     picture: string | null;
 }
 
-const TOKEN_STORAGE_KEY = 'summitjack:bridge-token';
+const TOKEN_STORAGE_KEY = 'tetherverse:bridge-token';
 
 declare global {
     interface Window {
@@ -28,7 +28,7 @@ declare global {
          * Read by the Phaser scene when saving a score. The scene is not a React
          * component, so it cannot call the hook directly.
          */
-        __summitJackAuthToken?: string | null;
+        __tetherverseAuthToken?: string | null;
     }
 }
 
@@ -59,7 +59,7 @@ export function useBridgeAuth() {
 
     const clearToken = useCallback(() => {
         tokenRef.current = null;
-        window.__summitJackAuthToken = null;
+        window.__tetherverseAuthToken = null;
         sessionStorage.removeItem(TOKEN_STORAGE_KEY);
     }, []);
 
@@ -83,7 +83,7 @@ export function useBridgeAuth() {
             }
 
             tokenRef.current = candidate;
-            window.__summitJackAuthToken = candidate;
+            window.__tetherverseAuthToken = candidate;
             sessionStorage.setItem(TOKEN_STORAGE_KEY, candidate);
             setUser(data.user);
             setStatus('verified');
@@ -152,7 +152,7 @@ export function useBridgeAuth() {
     // Do not leave a usable token behind when the frame goes away.
     useEffect(() => {
         return () => {
-            window.__summitJackAuthToken = null;
+            window.__tetherverseAuthToken = null;
         };
     }, []);
 
