@@ -192,6 +192,14 @@ export class WorldManager {
     private readonly overlays: Phaser.GameObjects.Components.Transform[] = [];
 
     /**
+     * The view the world layer was last fitted to, in world units.
+     *
+     * Fitted only when it actually changes, so the per-frame path is one
+     * comparison rather than five resizes.
+     */
+    private fittedView = { width: 0, height: 0 };
+
+    /**
      * One ambient emitter, reused across verses.
      *
      * Creating and destroying a ParticleEmitter per verse churns its internal
@@ -276,7 +284,13 @@ export class WorldManager {
 
     private buildOverlays(): void {
         const scene = this.ctx.scene;
-        const { width, height } = scene.scale;
+        // Sized to the view in world units, not to `scene.scale`, which is the
+        // window in pixels - see fitOverlays() for why those stopped being the
+        // same number. positionOverlays() refits on every resize from here.
+        const view = scene.cameras.main.worldView;
+        const width = view.width;
+        const height = view.height;
+        this.fittedView = { width, height };
 
         this.sky = scene.add.image(0, 0, skyTextureKey('VERGE'))
             .setOrigin(0.5, 0.5)
@@ -328,6 +342,10 @@ export class WorldManager {
         const view = scene.cameras.main.worldView;
         const time = scene.time.now;
 
+        if (view.width !== this.fittedView.width || view.height !== this.fittedView.height) {
+            this.fitOverlays(view.width, view.height);
+        }
+
         for (const overlay of this.overlays) {
             overlay.setPosition(view.centerX, view.centerY);
         }
@@ -339,6 +357,30 @@ export class WorldManager {
         if (this.scanTile && this.scanTile.alpha > 0.001) {
             this.scanTile.tilePositionY = time * 0.02;
         }
+    }
+
+    /**
+     * Sizes the world layer to the view.
+     *
+     * These were built from `scene.scale`, which is the window in pixels. That
+     * number equalled the view in world units only while the camera sat at zoom
+     * 1, and it stopped sitting at zoom 1 when the desktop scaling was fixed:
+     * at 1440x900 the layer came out 1440x900 inside a 2560x1600 view, which
+     * is a rectangle with four visible edges parked in the middle of the
+     * screen. The view is the number that is correct in world units, and reading
+     * it here rather than at construction also covers the window being resized
+     * mid-run.
+     */
+    private fitOverlays(width: number, height: number): void {
+        this.fittedView = { width, height };
+        this.sky?.setDisplaySize(width, height);
+        this.vignette?.setDisplaySize(width, height);
+        this.wash?.setDisplaySize(width, height);
+        // The atmosphere bands are sized rather than display-sized: TileSprite
+        // setSize changes how much area it covers while leaving the scanline and
+        // heat spacing inside it alone, where a display scale would stretch it.
+        this.heatTile?.setSize(width, height);
+        this.scanTile?.setSize(width, height);
     }
 
     // =====================================================================
