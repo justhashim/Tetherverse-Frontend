@@ -1,6 +1,7 @@
 import Phaser, { Scene } from "phaser";
 import { Player } from "../entities/Player";
-import { GAME_CONSTANTS, tierForAltitude } from "../config/game-constants";
+import { GAME_CONSTANTS } from "../config/game-constants";
+import { environmentForAltitude, hazardStateForAltitude, profileForAltitude } from "../config/difficulty";
 import { BasePlatform } from "../terrain/BasePlatform";
 import { Coin, createCoinTexture } from "../terrain/Coin";
 import { PivotEngine } from "../physics/PivotEngine";
@@ -16,6 +17,49 @@ const BANKING_REST_SPEED = 2;
 
 /** How far the player's feet may sit from a platform top and still count as a landing. */
 const BANKING_FOOT_TOLERANCE = 18;
+
+/**
+ * How far outside the camera the sky may drift before it is moved back.
+ *
+ * The background is scenery, and scenery is scattered across a band rather
+ * than pinned to the world: an object that has drifted out of the frame is put
+ * back on the other side of it, so the sky is as full at 5000m as it is at 5m.
+ */
+const BACKGROUND_MARGIN = 1400;
+
+/**
+ * How far beyond the visible edge the sky is drawn, in world units.
+ *
+ * The sky is anchored from the camera's scroll during update(), but the camera
+ * runs its follow lerp during preRender, so the anchor is always a frame
+ * behind. A camera moving a hundred units a frame would otherwise open a
+ * sliver of bare page at the edge on alternating frames.
+ */
+const BACKGROUND_OVERSCAN = 220;
+
+/**
+ * The stretch of mountain the window must always show, in world units.
+ *
+ * 1600 is the design height, and a 390x844 phone already shows exactly all of
+ * it under the old scaling. Locking every viewport to it means a monitor gets
+ * the same run rendered larger rather than a different run rendered small: the
+ * player is 52px on a phone and 55px at 1440x900, instead of 184px on a
+ * 1080p screen where it was, because the window's height, not its aspect
+ * ratio, decides how much world there is.
+ */
+const DESIGN_HEIGHT = 1600;
+
+/**
+ * How wide the view may get, in world units, before the height rule is
+ * overridden.
+ *
+ * The mountain is 2300 units wide (the corridor in the generator), so a view
+ * up to about 3000 shows the whole thing with a little sky either side. Beyond
+ * that the corridor becomes a stripe in the middle of an empty screen, and it
+ * is better to give up some height than to give the player a letterbox. It
+ * only binds on windows wider than about 2.6:1.
+ */
+const MAX_VIEW_WIDTH = 3000;
 
 export class GameScene extends Scene {
     private player!: Player;
@@ -58,6 +102,7 @@ export class GameScene extends Scene {
     private isGameOver: boolean = false;
     private cameraFollowOffsetX: number = 0;
     private lastHazardImpactTime: number = 0;
+    private playerIsFrayed: boolean = false;
 
     constructor() {
         super("GameScene");
@@ -167,15 +212,50 @@ export class GameScene extends Scene {
     create() {
         this.backgroundLayer = this.add.tileSprite(0, 0, this.scale.width, this.scale.height, 'game-background')
             .setOrigin(0, 0)
-            .setScrollFactor(0)
+            // World-space, and re-anchored to the camera's view every frame in
+            // updateBackgroundMotion.
+            //
+            // It was scrollFactor(0), which pins a sprite to the frame under
+            // zoom 1 and stops doing so the moment there is a zoom: the sky
+            // came off the top and the left of the screen and left bare page
+            // showing. Anchoring to worldView instead is true by construction -
+            // the sprite is the rectangle the camera is looking at - and it
+            // needs no special case for the scale mode, so the next person to
+            // change how the window is sized does not have to find this again.
+            .setScrollFactor(1)
             .setDepth(-2000)
             .setTileScale(3.5, 3.5);
+
+        // The view is sized before anything is scattered against it: the sky's
+        // band, the recycle edges and the line the run ends on are all measured
+        // in world units of the view, and none of them has a value until the
+        // camera knows how big the window is.
+        this.applyViewport();
+        this.scale.on(Phaser.Scale.Events.RESIZE, this.applyViewport, this);
+        this.events.once("shutdown", () => {
+            this.scale.off(Phaser.Scale.Events.RESIZE, this.applyViewport, this);
+        });
 
         this.seedBackgroundObjects();
 
         this.matter.world.setGravity(0, GAME_CONSTANTS.WORLD.GRAVITY_Y);
-        // Expand world bounds and disable the bottom physics wall so falling into the void is unrestricted
-        this.matter.world.setBounds(0, -50000, 5000, 100000, 64, true, true, false, false);
+        // The world is taller than any climb. The walls are the only part of
+        // the Matter world with an extent, so they are drawn high enough that
+        // no run will ever reach the top of them: their job is to stop a
+        // player who has drifted sideways from leaving the mountain, and they
+        // have to be there at every altitude to do it. The floor is left open
+        // so falling into the void is unrestricted.
+        this.matter.world.setBounds(
+            0,
+            -GAME_CONSTANTS.WORLD.BOUNDS_HEIGHT / 2,
+            5000,
+            GAME_CONSTANTS.WORLD.BOUNDS_HEIGHT,
+            64,
+            true,
+            true,
+            false,
+            false
+        );
 
         this.tetherGraphics = this.add.graphics();
         this.tetherGraphics.setDepth(90);
@@ -318,6 +398,7 @@ export class GameScene extends Scene {
         this.runLowestY = this.groundReferenceY;
         this.currentAltitudeMeters = 0;
         this.isGameOver = false;
+        this.playerIsFrayed = false;
 
         // Banked coins carry over between runs; pending coins do not, since the
         // mountain that held them is about to be rebuilt.
@@ -345,6 +426,17 @@ export class GameScene extends Scene {
         });
 
         this.dispatchAltitudeUpdate();
+
+        // The dial, on the console, for development. It is the only way to
+        // ask what the mountain is at an altitude without climbing to it, and
+        // it is where a themed world reads the mountain it is modulating.
+        if (process.env.NODE_ENV !== 'production') {
+            (window as unknown as { __tetherverseDifficulty?: unknown }).__tetherverseDifficulty = {
+                profileForAltitude,
+                hazardStateForAltitude,
+                environmentForAltitude,
+            };
+        }
 
         if (typeof window !== 'undefined') {
             window.dispatchEvent(new CustomEvent('tetherverse:game-ready'));
@@ -402,11 +494,12 @@ export class GameScene extends Scene {
 
         // Weather.
         //
-        // Keyed to the live altitude rather than the peak, so a player who has
-        // fallen out of the thin air gets a moment of calm to climb back into
-        // it. The mountain's shape is keyed to the peak and does not soften.
+        // Read against the live altitude rather than the peak, so a player who
+        // has fallen out of the thin air gets a moment of calm to climb back
+        // into it. The mountain's shape is keyed to the peak and does not
+        // soften.
         if (this.player && this.player.body && this.player.playerState !== "IDLE") {
-            const weather = GAME_CONSTANTS.ENVIRONMENT[tierForAltitude(this.currentAltitudeMeters)];
+            const weather = environmentForAltitude(this.currentAltitudeMeters);
 
             if (weather.wind !== 0) {
                 const windForceX = Math.sin(time * weather.windFrequency) * weather.wind;
@@ -429,6 +522,8 @@ export class GameScene extends Scene {
         } else if (this.tetherGraphics) {
             this.tetherGraphics.clear();
         }
+
+        this.applyTetherDamageTint();
 
         this.settlePlayerIfOnSurface();
 
@@ -477,26 +572,18 @@ export class GameScene extends Scene {
                 return;
             }
 
-            // 2. Off-screen camera drop:
-            // If the player is unhooked and has plummeted off the visible screen bottom
-            const cameraBottom = this.cameras.main.worldView.bottom;
-            if (!isHooked && this.player.y > cameraBottom + GAME_CONSTANTS.DEATH.cameraMargin && this.player.body.velocity.y > 0) {
+            // 2. Off the bottom of the screen:
+            // If the player is unhooked and has plummeted off the visible screen,
+            // the run is over. How far below the screen they may fall before it
+            // counts is the mountain's business: the void margin is a dial, and
+            // up high it is nearly closed.
+            const deathLine = this.getVisibleBottom() + this.levelGenerator.voidMargin;
+            if (!isHooked && this.player.y > deathLine && this.player.body.velocity.y > 0) {
                 this.handlePlayerFailure();
                 return;
             }
 
-            // 3. Fallen below the lowest active platform in the level (the void):
-            // When falling below all platforms with downward momentum and no tether
-            const lowestActive = this.levelGenerator.getLowestActivePlatform();
-            if (lowestActive && !isHooked) {
-                const voidLimitY = lowestActive.y + Math.min(150, this.levelGenerator.voidMargin);
-                if (this.player.y > voidLimitY && this.player.body.velocity.y > 0) {
-                    this.handlePlayerFailure();
-                    return;
-                }
-            }
-
-            // 4. Catastrophic drop to ground after climbing:
+            // 3. Catastrophic drop to ground after climbing:
             // If the player reached significant altitude (>= 20m) and fell all the way back
             // to the mountain base without recovering, the ascent is failed.
             const peakPixels = (this.groundReferenceY - this.runLowestY) - 20;
@@ -513,11 +600,84 @@ export class GameScene extends Scene {
         }
     }
 
+    /**
+     * Sizes the view to the window.
+     *
+     * Everything about how much world reaches the screen lives here and
+     * nowhere else. It used to be spread across a scale mode, a camera and a
+     * crop, and on a landscape monitor the three of them disagreed, which is
+     * how the player ended up at 184px on a 1080p screen and 52px on a phone.
+     *
+     * The window's height decides how much mountain there is: always the
+     * design's 1600 units, so every device plays the same run and a bigger
+     * screen simply draws it bigger. The width follows the aspect ratio until
+     * it would become a letterbox, at which point the height rule bends.
+     *
+     * Called from create() and on every resize; RESIZE mode makes the canvas
+     * the window, so a resize changes both the window and what is drawn in it.
+     */
+    private applyViewport() {
+        const width = this.scale.width;
+        const height = this.scale.height;
+        if (width <= 0 || height <= 0) return;
+
+        const zoom = Math.max(height / DESIGN_HEIGHT, width / MAX_VIEW_WIDTH);
+        this.cameras.main.setZoom(zoom);
+        // The sky is sized and placed from this same view every frame in
+        // updateBackgroundMotion, so there is nothing else to tell about it.
+    }
+
+    /**
+     * The window in world units: what the player can actually see.
+     *
+     * `camera.width` is the viewport in pixels, and it stops being the world
+     * shown the moment there is a zoom - which there always is now. Every
+     * off-screen test and every scatter band in this scene is measured against
+     * the view rather than against the camera's rectangle.
+     */
+    private get viewWidth(): number {
+        return this.cameras.main.width / this.cameras.main.zoom;
+    }
+
+    private get viewHeight(): number {
+        return this.cameras.main.height / this.cameras.main.zoom;
+    }
+
+    /**
+     * The bottom of the screen, in world coordinates.
+     *
+     * Phaser centres the view on `scrollY + height/2` and spans
+     * `height / zoom` world units either side of that centre, so the edge is
+     * half the viewport plus half the view - which is why these two halves are
+     * added rather than one of them being the other.
+     *
+     * Under ENVELOP this used to be a measurement of how much of a too-tall
+     * canvas survived being cropped, which was the scaling mode leaking into
+     * the death condition: the player fell most of a screen past the bottom of
+     * the window before the game noticed. Under RESIZE there is nothing to
+     * crop, so the whole of the camera's view is on screen and this is just
+     * its lower edge.
+     */
+    private getVisibleBottom(): number {
+        const camera = this.cameras.main;
+        return camera.scrollY + (camera.height + this.viewHeight) / 2;
+    }
+
+    /**
+     * Draws the tether.
+     *
+     * A frayed rope is drawn in pieces and in rose, because the player is
+     * swinging on it at speed and cannot look away to read a status bar: the
+     * state of the rope has to be on the rope. Cyan is the player's colour
+     * and means the tether is whole; rose is the failure colour and means it
+     * is not.
+     */
     private drawQuantumTether(startX: number, startY: number, targetX: number, targetY: number): void {
         this.tetherGraphics.clear();
 
         const isUnstable = this.pivotEngine?.isAttachedToUnstable() ?? false;
         const progress = this.pivotEngine?.getUnstableProgress() ?? 1;
+        const fray = this.pivotEngine?.getFrayAmount() ?? 0;
 
         if (isUnstable) {
             const isStrobe = progress < 0.35 && (Math.floor(Date.now() / 80) % 2 === 0);
@@ -525,22 +685,74 @@ export class GameScene extends Scene {
             const innerColor = isStrobe ? 0xff0022 : 0xff7700;
 
             this.tetherGraphics.lineStyle(9, outerColor, 0.5);
-            this.tetherGraphics.lineBetween(startX, startY, targetX, targetY);
+            this.drawTetherRun(startX, startY, targetX, targetY, fray);
 
             this.tetherGraphics.lineStyle(4, innerColor, 0.85);
-            this.tetherGraphics.lineBetween(startX, startY, targetX, targetY);
+            this.drawTetherRun(startX, startY, targetX, targetY, fray);
 
             this.tetherGraphics.lineStyle(1.8, 0xffffff, 1.0);
-            this.tetherGraphics.lineBetween(startX, startY, targetX, targetY);
+            this.drawTetherRun(startX, startY, targetX, targetY, fray);
         } else {
-            this.tetherGraphics.lineStyle(8, 0xFF007F, 0.4);
-            this.tetherGraphics.lineBetween(startX, startY, targetX, targetY);
+            const core = fray > 0 ? 0xff0055 : 0x00ffcc;
 
-            this.tetherGraphics.lineStyle(4, 0x00FFCC, 0.8);
-            this.tetherGraphics.lineBetween(startX, startY, targetX, targetY);
+            this.tetherGraphics.lineStyle(8, 0xff007f, 0.4);
+            this.drawTetherRun(startX, startY, targetX, targetY, fray);
 
-            this.tetherGraphics.lineStyle(1.5, 0xFFFFFF, 1.0);
+            this.tetherGraphics.lineStyle(4, core, 0.8);
+            this.drawTetherRun(startX, startY, targetX, targetY, fray);
+
+            this.tetherGraphics.lineStyle(1.5, 0xffffff, 1.0);
+            this.drawTetherRun(startX, startY, targetX, targetY, fray);
+        }
+    }
+
+    /**
+     * Draws the tether, in pieces if it is frayed.
+     *
+     * The gaps are where the rope is worn thin, and there are more of them
+     * the worse the damage is, so the rope looks worse the worse it is.
+     */
+    private drawTetherRun(
+        startX: number,
+        startY: number,
+        targetX: number,
+        targetY: number,
+        fray: number
+    ): void {
+        if (fray <= 0) {
             this.tetherGraphics.lineBetween(startX, startY, targetX, targetY);
+            return;
+        }
+
+        const pieces = 6 + Math.round(fray * 10);
+        for (let i = 0; i < pieces; i += 2) {
+            const from = i / pieces;
+            const to = Math.min(1, (i + 1) / pieces);
+            this.tetherGraphics.lineBetween(
+                startX + (targetX - startX) * from,
+                startY + (targetY - startY) * from,
+                startX + (targetX - startX) * to,
+                startY + (targetY - startY) * to
+            );
+        }
+    }
+
+    /**
+     * The player wears the damage.
+     *
+     * Rose is the failure colour and cyan is the player's, so a frayed tether
+     * is a rose player until the rope re-braids itself. The player should not
+     * have to look at the rope to know that the rope is hurt.
+     */
+    private applyTetherDamageTint(): void {
+        const frayed = (this.pivotEngine?.getFrayAmount() ?? 0) > 0;
+        if (frayed === this.playerIsFrayed) return;
+        this.playerIsFrayed = frayed;
+
+        if (frayed) {
+            this.player.setTint(0xff0055);
+        } else {
+            this.player.clearTint();
         }
     }
 
@@ -594,24 +806,47 @@ export class GameScene extends Scene {
         }
     }
 
+    /**
+     * Scatters the sky.
+     *
+     * The background is not a place in the world, it is a backdrop, and a
+     * backdrop that was scattered once and never again is a sky that runs
+     * out. The climb has no ceiling, so the sky has to be enterable at any
+     * height: the objects are placed against the camera rather than against
+     * the ground, and the recycling keeps them in frame for as long as the
+     * run lasts.
+     */
     private seedBackgroundObjects() {
         this.backgroundObjects.forEach(object => object.destroy());
         this.backgroundObjects = [];
 
-        const topY = this.groundReferenceY - 3200;
-        const bottomY = this.groundReferenceY + 1200;
-
-        let currentY = bottomY;
-        while (currentY > topY) {
-            const object = this.createBackgroundObject(currentY);
+        // The band is the view's own rectangle plus the margin on each side,
+        // which is where an object may sit and still be somewhere the player
+        // could see it. The density is the density the sky has always had, so
+        // the world looks the same as it did when the band was a fixed strip
+        // of the world. It is the view and not the camera's rectangle, because
+        // zoom makes those two different sizes.
+        let offset = this.viewHeight + BACKGROUND_MARGIN;
+        while (offset > -BACKGROUND_MARGIN) {
+            const object = this.createBackgroundObject(
+                Phaser.Math.Between(-180, this.viewWidth + 180),
+                offset
+            );
             this.backgroundObjects.push(object);
-            currentY -= Phaser.Math.Between(220, 520);
+            offset -= Phaser.Math.Between(220, 520);
         }
     }
 
-    private createBackgroundObject(y: number) {
+    /**
+     * Puts one piece of the sky at a given place on the screen.
+     *
+     * The parallax factor is drawn first, because where an object sits in the
+     * world depends on it: an object that drifts slowly is far away, and the
+     * world height that puts it in front of the player is not the same one
+     * that puts a fast-drifting object there.
+     */
+    private createBackgroundObject(cameraX: number, cameraY: number) {
         const textureKey = Phaser.Utils.Array.GetRandom(this.backgroundObjectTextures);
-        const x = Phaser.Math.Between(-180, this.scale.width + 180);
         const parallax = Phaser.Math.FloatBetween(0.08, 0.25);
         const scale = textureKey.includes('planet')
             ? Phaser.Math.FloatBetween(0.25, 0.6)
@@ -619,7 +854,13 @@ export class GameScene extends Scene {
                 ? Phaser.Math.FloatBetween(0.15, 0.45)
                 : Phaser.Math.FloatBetween(0.45, 0.95);
 
-        const object = this.add.image(x, y, textureKey)
+        const camera = this.cameras.main;
+
+        const object = this.add.image(
+            cameraX + camera.scrollX * parallax,
+            cameraY + camera.scrollY * parallax,
+            textureKey
+        )
             .setScrollFactor(parallax)
             .setDepth(-1500)
             .setAlpha(textureKey.includes('stars') ? 0.55 : 0.9)
@@ -631,8 +872,30 @@ export class GameScene extends Scene {
 
     private updateBackgroundMotion() {
         if (this.backgroundLayer) {
-            this.backgroundLayer.tilePositionY = this.cameras.main.scrollY * 0.25;
-            this.backgroundLayer.tilePositionX = this.cameras.main.scrollX * 0.05;
+            const camera = this.cameras.main;
+
+            // The view's own rectangle, worked out the way Phaser's preRender
+            // works it out: the centre sits half a viewport along from the
+            // scroll, and the view spans `viewport / zoom` either side of that
+            // centre. Computed rather than read from camera.worldView because
+            // preRender - which writes it, and which also runs the camera's
+            // follow lerp - has not happened yet when update() runs, so the
+            // worldView still describes the previous frame.
+            //
+            // The +OVERSCAN keeps the edge a frame's camera movement away from
+            // the screen, so the lag in the scroll value never shows up as a
+            // sliver of page down either side.
+            const viewW = this.viewWidth;
+            const viewH = this.viewHeight;
+            const left = camera.scrollX + camera.width / 2 - viewW / 2 - BACKGROUND_OVERSCAN;
+            const top = camera.scrollY + camera.height / 2 - viewH / 2 - BACKGROUND_OVERSCAN;
+
+            this.backgroundLayer.setPosition(left, top);
+            this.backgroundLayer.setSize(viewW + BACKGROUND_OVERSCAN * 2, viewH + BACKGROUND_OVERSCAN * 2);
+
+            // Slower than the world: that is what makes it sky.
+            this.backgroundLayer.tilePositionY = camera.scrollY * 0.25;
+            this.backgroundLayer.tilePositionX = camera.scrollX * 0.05;
         }
 
         if (!this.backgroundObjects.length) {
@@ -640,43 +903,61 @@ export class GameScene extends Scene {
         }
 
         const camera = this.cameras.main;
-        const worldView = camera.worldView;
-        const recycleTop = worldView.top - 1400;
-        const recycleBottom = worldView.bottom + 1400;
 
         for (const object of this.backgroundObjects) {
-            if (object.y > recycleBottom) {
-                const replacement = this.getBackgroundObjectPlacement(recycleTop);
-                object.setPosition(replacement.x, replacement.y);
-                this.restyleBackgroundObject(object, replacement.textureKey);
-            } else if (object.y < recycleTop) {
-                const replacement = this.getBackgroundObjectPlacement(recycleBottom);
-                object.setPosition(replacement.x, replacement.y);
-                this.restyleBackgroundObject(object, replacement.textureKey);
+            // A parallax object does not travel with the camera: it moves at
+            // its own fraction of the camera's speed, so the part of the
+            // world it can be seen in shrinks as the camera climbs. Asking
+            // where the object is in the world says nothing about whether it
+            // is still in frame; asking where it is on the screen does.
+            const cameraY = object.y - camera.scrollY * object.scrollFactorY;
+            const cameraX = object.x - camera.scrollX * object.scrollFactorX;
+
+            if (cameraY > this.viewHeight + BACKGROUND_MARGIN) {
+                // Drifted off the bottom: put it back above the top.
+                this.recycleBackgroundObject(object, cameraX, -BACKGROUND_MARGIN);
+            } else if (cameraY < -BACKGROUND_MARGIN) {
+                this.recycleBackgroundObject(object, cameraX, this.viewHeight + BACKGROUND_MARGIN);
+            } else if (cameraX > this.viewWidth + BACKGROUND_MARGIN) {
+                this.recycleBackgroundObject(object, -BACKGROUND_MARGIN, cameraY);
+            } else if (cameraX < -BACKGROUND_MARGIN) {
+                this.recycleBackgroundObject(object, this.viewWidth + BACKGROUND_MARGIN, cameraY);
             }
         }
     }
 
-    private getBackgroundObjectPlacement(y: number) {
-        return {
-            x: Phaser.Math.Between(-180, this.scale.width + 180),
-            y,
-            textureKey: Phaser.Utils.Array.GetRandom(this.backgroundObjectTextures)
-        };
-    }
-
-    private restyleBackgroundObject(object: Phaser.GameObjects.Image, textureKey: string) {
+    /**
+     * Moves a piece of the sky to the other side of the frame.
+     *
+     * It is a new piece of sky rather than the same one moved: a different
+     * texture, a different size, a different depth of field. The player is
+     * climbing through a sky that is always slightly different, and never
+     * through the same handful of planets being dragged along behind them.
+     */
+    private recycleBackgroundObject(
+        object: Phaser.GameObjects.Image,
+        cameraX: number,
+        cameraY: number
+    ) {
+        const textureKey = Phaser.Utils.Array.GetRandom(this.backgroundObjectTextures);
+        const parallax = Phaser.Math.FloatBetween(0.08, 0.25);
         const scale = textureKey.includes('planet')
             ? Phaser.Math.FloatBetween(0.25, 0.6)
             : textureKey.includes('asteroid')
                 ? Phaser.Math.FloatBetween(0.15, 0.45)
                 : Phaser.Math.FloatBetween(0.45, 0.95);
 
+        const camera = this.cameras.main;
+
         object.setTexture(textureKey);
-        object.setScrollFactor(Phaser.Math.FloatBetween(0.08, 0.25));
+        object.setScrollFactor(parallax);
         object.setAlpha(textureKey.includes('stars') ? 0.55 : 0.9);
         object.setScale(scale);
         object.setRotation(Phaser.Math.FloatBetween(0, Math.PI * 2));
+        object.setPosition(
+            cameraX + camera.scrollX * parallax,
+            cameraY + camera.scrollY * parallax
+        );
     }
 
     private handlePlayerFailure() {
@@ -840,6 +1121,10 @@ export class GameScene extends Scene {
         // Force release grapple tether if hooked
         if (this.pivotEngine) {
             this.pivotEngine.forceRelease();
+            // The rope is what the hit costs. The run continues, but the swing
+            // the player has next is a worse one, and the next one after that
+            // is worse still.
+            this.pivotEngine.damageTether(GAME_CONSTANTS.TETHER.frayPerHit);
         }
 
         // Radial deflection impulse away from hazard center
@@ -855,13 +1140,6 @@ export class GameScene extends Scene {
 
         // Screen shake and impact flash
         this.cameras.main.shake(180, 0.012);
-
-        this.player.setTint(0xff0055);
-        this.time.delayedCall(240, () => {
-            if (this.player && this.player.active) {
-                this.player.clearTint();
-            }
-        });
 
         const blastRing = this.add.circle(this.player.x, this.player.y, 20, 0xff0077, 0.9).setDepth(85);
         this.tweens.add({
@@ -898,7 +1176,14 @@ export class GameScene extends Scene {
                     ...(bridgeToken ? { Authorization: `Bearer ${bridgeToken}` } : {}),
                 },
                 body: JSON.stringify({
-                    score: Math.floor(finalAltitude),
+                    // The column the score lands in is a 32-bit integer, so a
+                    // run that somehow climbed past its ceiling is reported at
+                    // the ceiling: a score that does not fit is a score that
+                    // was never saved.
+                    score: Math.min(
+                        Math.floor(finalAltitude),
+                        GAME_CONSTANTS.WORLD.MAX_ALTITUDE_METERS
+                    ),
                     // Banked coins only. Pending ones were earned on the mountain
                     // and the run just ended, so they are lost with it.
                     coins: Math.floor(coins),

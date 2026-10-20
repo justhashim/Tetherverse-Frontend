@@ -21,6 +21,17 @@ export class PivotEngine {
     private readonly UNSTABLE_MAX_DURATION: number = GAME_CONSTANTS.HAZARD.unstableDurationMs;
     private currentHookedAnchorBody: MatterJS.BodyType | null = null;
 
+    /**
+     * How frayed the tether is, from whole to about to snap.
+     *
+     * A frayed rope is a longer rope: it pays out under the load, so the
+     * swing it holds is a bigger, lower arc and the release comes from
+     * further down. The player is not killed for hitting something - they
+     * are handed a worse swing for the next ten seconds, which is a
+     * punishment they can climb out of.
+     */
+    private fray: number = 0;
+
     private readonly pointerDownHandler = (pointer: Phaser.Input.Pointer) => this.attemptAnchor(pointer);
     private readonly pointerUpHandler = () => this.releaseAnchor();
 
@@ -123,7 +134,7 @@ export class PivotEngine {
                 this.player.body.position.y,
                 aimedAnchor.position.x,
                 aimedAnchor.position.y
-            ),
+            ) * this.ropeStretch(),
             GAME_CONSTANTS.SWING.CONSTRAINT_STIFFNESS,
             {
                 pointA: { x: 0, y: 0 },
@@ -132,7 +143,46 @@ export class PivotEngine {
         );
     }
 
+    /**
+     * How much longer the rope is than the distance to the anchor.
+     *
+     * A frayed rope pays out. The swing it holds is a bigger arc, so the
+     * player drops further before the rope goes taut and releases from
+     * further down - the same swing, made worse, which is a consequence the
+     * player can feel inside one swing rather than read off a status bar.
+     */
+    private ropeStretch(): number {
+        const tether = GAME_CONSTANTS.TETHER;
+        return 1 + (this.fray / tether.maxFray) * tether.stretchAtMaxFray;
+    }
+
+    /**
+     * Hurts the tether.
+     *
+     * The cost of an impact is on the rope rather than on the run: the climb
+     * continues, but the rope is worse at holding it, and it is worse by more
+     * each time, so a run of hits is a run of bad swings.
+     */
+    public damageTether(amount: number): void {
+        this.fray = Math.min(GAME_CONSTANTS.TETHER.maxFray, this.fray + amount);
+    }
+
+    /** How frayed the tether is, from 0 (whole) to 1 (about to snap). */
+    public getFrayAmount(): number {
+        return this.fray;
+    }
+
     public updateEngineRoutines(delta: number = 16.6): void {
+        // The rope re-braids itself, slowly. The damage has to outlast the
+        // swing it happened in, or it is a hiccup rather than a consequence,
+        // and it has to fade on its own, or one bad minute would end the run.
+        if (this.fray > 0) {
+            this.fray = Math.max(
+                0,
+                this.fray - (GAME_CONSTANTS.TETHER.repairPerSecond * delta) / 1000
+            );
+        }
+
         const pointer = this.scene.input.activePointer;
 
         // Drag-to-scan for a wall hook without requiring a fresh tap

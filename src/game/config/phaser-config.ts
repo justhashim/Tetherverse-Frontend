@@ -12,24 +12,32 @@ export const gameConfig: Phaser.Types.Core.GameConfig = {
 
     scale: {
         /**
-         * ENVELOP, not FIT.
+         * RESIZE, not ENVELOP.
          *
-         * FIT scales the game down until all of it fits, which on a landscape
-         * screen leaves the 1024x1600 world in a narrow column down the middle
-         * with the page background either side of it. The game world and the
-         * page behind it were two different skies with a hard seam down the
-         * middle of the screen.
+         * The game is a portrait design: 1024x1600 world units. ENVELOP scales
+         * the canvas up until it covers the window, and on a landscape window
+         * that means scaling until the *width* fits, which throws away the top
+         * and bottom of the camera to make room. Measured:
          *
-         * ENVELOP scales the game up until it covers the screen, cropping the
-         * overflow instead. The camera follows the player, so what gets
-         * cropped is sky and mountain that were never in play, and the world
-         * reaches the edges of the screen on every device.
+         *     1920x1080  shows 1024x576  - 36% of the camera, magnified 1.875x
+         *     1440x900   shows 1024x640  - 40%, magnified 1.406x
+         *      390x844   shows  739x1600 - all of it, at 0.527x
          *
-         * The world itself is unchanged: the game is still 1024x1600 world
-         * units, so every platform, hook and altitude in the generator means
-         * exactly what it meant before.
+         * The bigger the monitor, the more the game was blown up: the player
+         * sprite was 52px on a phone and 184px on a 1080p screen. That is the
+         * whole complaint about desktop looking enlarged, and no amount of
+         * tuning inside the scene can fix it, because the crop is this mode's.
+         *
+         * RESIZE makes the canvas the size of the window and nothing else, so
+         * there is no overflow to crop. What the camera shows is then decided
+         * by its zoom, in one place in GameScene, where it can be locked to the
+         * design height instead of to the window's aspect ratio.
+         *
+         * The world is unchanged: still 1024x1600 design units, so every
+         * platform, hook and altitude in the generator means exactly what it
+         * meant before.
          */
-        mode: Phaser.Scale.ENVELOP,
+        mode: Phaser.Scale.RESIZE,
         autoCenter: Phaser.Scale.CENTER_BOTH,
     },
 
