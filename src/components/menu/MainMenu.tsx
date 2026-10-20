@@ -10,7 +10,7 @@ import {
     useTransform,
 } from "framer-motion";
 import ProfileCard from "./ProfileCard";
-import VerseCanvas from "./VerseCanvas";
+import VerseScenes from "./VerseScenes";
 import { stratumForAltitude } from "@/src/game/config/strata";
 
 interface MainMenuProps {
@@ -193,11 +193,15 @@ export default function MainMenu({
                 Four parallel pieces of sky, side by side, with the control
                 sitting on the seam between the middle two.
 
-                They are translucent on purpose. The nebula the game itself
-                scrolls past is behind this screen, and a slice that covered it
-                would flatten the menu into four colour blocks; at this opacity
-                the world shows through and each verse reads as a tint laid over
-                the same sky, which is exactly what a parallel verse is.
+                Each verse is opaque where it counts and transparent only at its
+                edges. The earlier version was a translucent wash over one shared
+                sky, and it read as four colour blocks: a wash carries no
+                silhouette, and a silhouette is the only thing that makes a sky a
+                *place* rather than a colour. So each verse now brings its own
+                painted backdrop and its own cut-out shapes - hull plating over
+                the Verge, bioluminescent caps over the Bloom, gantries over the
+                Kiln, fragments over the Null - blended to nothing across its
+                outer 15%, so that where two meet they mix.
 
                 The seams are hairlines rather than gaps. Four hard panels would
                 be a layout; four atmospheres meeting at a line is a view. */}
@@ -209,13 +213,13 @@ export default function MainMenu({
                 className="pointer-events-none absolute -inset-x-4 inset-y-0 overflow-hidden"
                 aria-hidden="true"
             >
-                <VerseCanvas className="absolute inset-0 h-full w-full" />
+                <VerseScenes className="absolute inset-0 h-full w-full" />
 
                 {/* The seams, on the same quarter marks the verse names below
                     are laid out on, so the row of names and the sky above it
-                    are one grid rather than two. The canvas draws its own
-                    boundaries as blends; these lines are what say the blends
-                    are four and not one. */}
+                    are one grid rather than two. The slices blend their own
+                    edges; these lines are what say the blends are four and not
+                    one. */}
                 {[25, 50, 75].map((pct) => (
                     <div key={pct}
                         className="absolute inset-y-0 w-px bg-white/[0.06]"
