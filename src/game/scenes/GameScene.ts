@@ -613,12 +613,30 @@ export class GameScene extends Scene {
                 return;
             }
 
-            // 2. Off the bottom of the screen:
-            // If the player is unhooked and has plummeted off the visible screen,
-            // the run is over. How far below the screen they may fall before it
-            // counts is the mountain's business: the void margin is a dial, and
-            // up high it is nearly closed.
-            const deathLine = this.getVisibleBottom() + this.levelGenerator.voidMargin;
+            // 2. The void below the peak.
+            //
+            // This used to measure against the bottom of the screen, and the
+            // camera follows the player on BOTH axes (`startFollow`, lerp 0.08)
+            // with a fixed offset - so `scrollY` travelled down with the player
+            // and the line travelled with it. Once the follow had settled the
+            // test reduced to `player.y > player.y + const`, which is never
+            // true: a player could fall a long way and stay alive, and the run
+            // only ended when a violent plummet happened to outrun the lerp on
+            // the way down.
+            //
+            // The void is anchored to the PEAK instead. `runLowestY` is the
+            // highest point reached this run, and its declaration has always
+            // said it exists to move the death-zone up - it just was never read
+            // for that. Now the floor rises as the player climbs, which is what
+            // the void margin dial has been describing all along ("the void is
+            // right under your feet" at the top, "forgiving death-void" at the
+            // bottom) without the geometry ever having agreed with it.
+            //
+            // A full view-height of slack, so a missed ledge is still a
+            // mistake that can be seen and recovered from rather than an
+            // instant loss, with the tier's void margin on top deciding how
+            // generous that is at altitude.
+            const deathLine = this.runLowestY + this.viewHeight + this.levelGenerator.voidMargin;
             if (!isHooked && this.player.y > deathLine && this.player.body.velocity.y > 0) {
                 this.handlePlayerFailure();
                 return;
@@ -682,26 +700,6 @@ export class GameScene extends Scene {
 
     private get viewHeight(): number {
         return this.cameras.main.height / this.cameras.main.zoom;
-    }
-
-    /**
-     * The bottom of the screen, in world coordinates.
-     *
-     * Phaser centres the view on `scrollY + height/2` and spans
-     * `height / zoom` world units either side of that centre, so the edge is
-     * half the viewport plus half the view - which is why these two halves are
-     * added rather than one of them being the other.
-     *
-     * Under ENVELOP this used to be a measurement of how much of a too-tall
-     * canvas survived being cropped, which was the scaling mode leaking into
-     * the death condition: the player fell most of a screen past the bottom of
-     * the window before the game noticed. Under RESIZE there is nothing to
-     * crop, so the whole of the camera's view is on screen and this is just
-     * its lower edge.
-     */
-    private getVisibleBottom(): number {
-        const camera = this.cameras.main;
-        return camera.scrollY + (camera.height + this.viewHeight) / 2;
     }
 
     /**
