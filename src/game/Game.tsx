@@ -91,9 +91,13 @@ export default function Game({ isActive = true }: GameProps) {
         }}
       />
 
-      {/* Cybernetic loading indicator during asset load or initial boot */}
+      {/* Cybernetic loading indicator during asset load or initial boot.
+          No backdrop-blur on this scrim: it covers the booting canvas, and a
+          backdrop-filter over a live canvas measured 18 -> 8 fps in WebKit
+          (model A/B; Chromium 60fps either way). At 90% opaque the blur was
+          nearly invisible behind it. */}
       {!isReady && isActive && (
-        <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-slate-950/90 backdrop-blur-md transition-opacity duration-300">
+        <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-slate-950/90 transition-opacity duration-300">
           {/* One spinner, still. The counter-rotating inner ring doubled the
               moving parts without adding information. */}
           <div
