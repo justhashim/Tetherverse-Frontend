@@ -1,6 +1,18 @@
 import Phaser from "phaser";
 import { GameScene } from "../scenes/GameScene";
 
+/**
+ * The live game instance, for the measurement harness.
+ *
+ * The harness drives the game over CDP and needs a way in that does not go
+ * through the React tree. The newest game wins: dev StrictMode boots twice.
+ */
+declare global {
+    interface Window {
+        __tetherverseGame?: Phaser.Game;
+    }
+}
+
 export const gameConfig: Phaser.Types.Core.GameConfig = {
     type: Phaser.AUTO,
     parent: "game-container",
@@ -50,4 +62,20 @@ export const gameConfig: Phaser.Types.Core.GameConfig = {
     },
 
     scene: [GameScene],
+
+    /**
+     * Hands the running game to the measurement harness.
+     *
+     * Deliberately a config callback rather than a line inside GameScene: the
+     * scene is owned by another agent's concurrent diff, and a debug handle is
+     * not worth a merge conflict. The newest game wins, because dev StrictMode
+     * boots the game twice and the harness has to talk to the live one.
+     */
+    callbacks: {
+        postBoot: (game: Phaser.Game) => {
+            if (typeof window !== "undefined") {
+                window.__tetherverseGame = game;
+            }
+        },
+    },
 };

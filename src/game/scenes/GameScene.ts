@@ -6,6 +6,11 @@ import { BasePlatform } from "../terrain/BasePlatform";
 import { Coin, createCoinTexture } from "../terrain/Coin";
 import { PivotEngine } from "../physics/PivotEngine";
 import { LevelGenerator } from "../levels/LevelGenerator";
+// [WORLDS] One import. Everything the portal system does to the scene enters
+// through this type; see the field declaration below for why it is a single
+// boundary rather than a set of scattered hooks.
+import { WorldManager, type WorldContext } from "../worlds/WorldManager";
+import { preloadAllSkinArt } from "../worlds/theming";
 
 /**
  * Vertical speed below which the player counts as settled rather than flying past.
@@ -69,6 +74,18 @@ export class GameScene extends Scene {
     private backgroundLayer!: Phaser.GameObjects.TileSprite;
     private backgroundObjects: Phaser.GameObjects.Image[] = [];
     private tetherGraphics!: Phaser.GameObjects.Graphics;
+
+    /**
+     * [WORLDS] Owns the portal system and everything that is not the climb.
+     *
+     * It is given a context of getters rather than references, because this
+     * scene rebuilds its generator and its platform list across restarts and a
+     * captured reference would quietly point at the previous run's world. The
+     * scene's own play, input, tether and death logic are untouched by it: the
+     * only two things it asks of the scene are a tick at the end of update() and
+     * the state it can already read.
+     */
+    private worldManager?: WorldManager;
 
     private readonly backgroundObjectTextures = [
         'background-asteroid-1',
@@ -438,12 +455,36 @@ export class GameScene extends Scene {
             };
         }
 
+        // [WORLDS] Built last, after every system it reads from, so the gravity
+        // the scene set in create() is the base it modulates rather than
+        // competes with. Pre-warming the verse art here keeps the first
+        // transition free of a texture-generation hitch.
+        preloadAllSkinArt(this);
+        const worldContext: WorldContext = {
+            scene: this,
+            player: () => (this.player?.body ? this.player : null),
+            platforms: () => this.platforms,
+            generator: () => this.levelGenerator ?? null,
+            pivotEngine: () => this.pivotEngine ?? null,
+            backgroundLayer: () => this.backgroundLayer ?? null,
+            backgroundObjects: () => this.backgroundObjects ?? [],
+            groundReferenceY: () => this.groundReferenceY,
+            altitudeMeters: () => this.currentAltitudeMeters,
+        };
+        this.worldManager = new WorldManager(worldContext);
+
         if (typeof window !== 'undefined') {
             window.dispatchEvent(new CustomEvent('tetherverse:game-ready'));
         }
     }
 
     update(time: number, delta: number) {
+        // [WORLDS] The world may change on any frame, including one where the
+        // climb has already ended, so it ticks before the guard: a pending
+        // transition still resolves and cleans up after a death rather than
+        // leaving tweens and a gate pointing at a dead scene.
+        this.worldManager?.update(time, delta);
+
         if (this.isGameOver) return;
 
         this.updateBackgroundMotion();
