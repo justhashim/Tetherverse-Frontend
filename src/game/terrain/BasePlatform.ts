@@ -78,6 +78,13 @@ export class BasePlatform extends Phaser.GameObjects.Image {
             repeat: 24, // 24 * 50ms = 1200ms
             yoyo: true,
             onComplete: () => {
+                // The route recycles platforms while a crumble is still running,
+                // and a destroyed GameObject has no scene left - so a shake that
+                // outlived its platform used to throw here and take the frame
+                // with it. Bailing out is also the correct behaviour: a platform
+                // that no longer exists has no body left to remove.
+                if (!this.scene || !this.active) return;
+
                 // 2. Remove physics collision body so player can no longer stand on it
                 if (this.body) {
                     this.scene.matter.world.remove(this.body);
