@@ -934,6 +934,16 @@ export class LevelGenerator {
         return this.platforms;
     }
 
+    /**
+     * Live tether anchors. WorldManager dresses these per verse, the same way it
+     * dresses platforms: the generator creates them behind its back, so it can
+     * only hand over the list and let the class that owns the palette decide
+     * what an anchor in KILN looks like.
+     */
+    public getHookNodes(): readonly Phaser.Physics.Matter.Image[] {
+        return this.hookNodes;
+    }
+
     /** Drops a collected coin so it stops colliding and stops being drawn. */
     public removeCoin(coin: Coin): void {
         const i = this.coins.indexOf(coin);

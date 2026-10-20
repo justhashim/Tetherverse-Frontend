@@ -26,10 +26,13 @@ import {
     POD_TEXTURE_KEY,
     SCANLINE_TEXTURE_KEY,
     VIGNETTE_TEXTURE_KEY,
+    SHARED_PLATFORM_KEY,
     ensureSkinArt,
+    hookNodeTextureKey,
     particleTextureKey,
     platformTextureKey,
     skyTextureKey,
+    warningPlatformTextureKey,
 } from './theming';
 
 /**
@@ -176,6 +179,9 @@ export class WorldManager {
 
     /** Platforms already given this verse's look. A WeakSet so culling frees them. */
     private themed: WeakSet<BasePlatform> = new WeakSet();
+    /** Hook anchors already dressed for the current verse. Same reasoning, and
+        for the same reason re-theming has to re-register them. */
+    private themedHooks: WeakSet<Phaser.Physics.Matter.Image> = new WeakSet();
     /** Hazards already considered for density thinning. Same reasoning. */
     private hazarded: WeakSet<CosmicHazard> = new WeakSet();
 
@@ -238,6 +244,7 @@ export class WorldManager {
         this.buildOverlays();
         ensureSkinArt(ctx.scene, this.current.skin);
         this.rethemeAllPlatforms();
+        this.rethemeAllHooks();
         this.applyTintToBackdrop(this.current.skin);
 
         // Scene restarts are the normal way a run ends, and the shutdown hook is
@@ -256,6 +263,7 @@ export class WorldManager {
         this.updateGravity(delta);
         this.updateTransition(delta);
         this.themeNewPlatforms(time);
+        this.themeNewHooks();
         this.thinHazards();
         this.updatePortal(player);
         this.updateVerseBehaviour(time, delta, player);
@@ -486,6 +494,7 @@ export class WorldManager {
         this.heatPlatform = null;
 
         this.rethemeAllPlatforms();
+        this.rethemeAllHooks();
         this.applyTintToBackdrop(to.skin);
         this.swapSky(from.skin, to.skin);
         this.applyScreenFx(from.skin, to.skin);
@@ -847,17 +856,84 @@ export class WorldManager {
     }
 
     /**
+     * One tether anchor, dressed for the current verse.
+     *
+     * The anchor is what the line bites onto, so it is where the world's
+     * technology shows: a machined hardpoint in VERGE, a seed pod in BLOOM, a
+     * riveted eye-bolt in KILN, a wireframe node in NULL. All four are drawn
+     * near-white precisely so that `setTint` still reaches them - an unstable
+     * anchor has to be able to go hot pink, and a coloured plate multiplied by
+     * pink is mud.
+     *
+     * `setDisplaySize` is re-asserted after the swap because `setTexture`
+     * resets an image to its frame's natural size, and the anchor's 80px is a
+     * gameplay dimension rather than a look.
+     */
+    private applySkinToHook(node: Phaser.Physics.Matter.Image, skin: WorldSkin): void {
+        const key = hookNodeTextureKey(skin.id);
+        if (!node || !node.active || !this.ctx.scene.textures.exists(key)) return;
+
+        node.setTexture(key);
+        node.setDisplaySize(80, 80);
+
+        // Re-asserted rather than remembered: the unstable warning is the one
+        // piece of gameplay information on this object, and it must not be
+        // something a texture swap is able to lose. Phaser's body union does
+        // not agree with Matter on whether `label` is present, so it is read
+        // defensively - the label is a hint here, not a protocol.
+        const label = (node.body as { label?: string } | undefined)?.label ?? '';
+        if (label === 'HookAnchor_Unstable') {
+            node.setTint(0xff0066);
+        } else {
+            node.clearTint();
+        }
+    }
+
+    private themeNewHooks(): void {
+        const hooks = this.ctx.generator()?.getHookNodes();
+        if (!hooks) return;
+
+        const skin = this.current.skin;
+        for (const node of hooks) {
+            if (!node || !node.active) continue;
+            if (this.themedHooks.has(node)) continue;
+            this.themedHooks.add(node);
+            this.applySkinToHook(node, skin);
+        }
+    }
+
+    /** The whole anchor set at once, for the two moments a verse changes. */
+    private rethemeAllHooks(): void {
+        const hooks = this.ctx.generator()?.getHookNodes();
+        if (!hooks) return;
+
+        const skin = this.current.skin;
+        for (const node of hooks) {
+            if (!node || !node.active) continue;
+            if (!this.themedHooks.has(node)) this.themedHooks.add(node);
+            this.applySkinToHook(node, skin);
+        }
+    }
+
+    /**
      * One platform, dressed for the current verse.
      *
      * Two decisions live here that look cosmetic and are not.
      *
-     * Crumbling and risk platforms keep the ORIGINAL texture and the original
-     * tints in every verse. They are semantics, not scenery: amber means the
-     * coins are on this ledge, and the fuchsia fringe means this ledge gives way.
-     * A player learns those two colours once and reads them at 120px wide in a
-     * fast arc; remapping them to a verse's palette would trade a law the game
-     * already has for a consistency nobody asked for. It also means the duotone
-     * pass has to run on ordinary ground only, which is most of it.
+     * Crumbling and risk platforms keep the ORIGINAL tints in every verse. They
+     * are semantics, not scenery: amber means the coins are on this ledge, and
+     * the fuchsia fringe means this ledge gives way. A player learns those two
+     * colours once and reads them at 120px wide in a fast arc; remapping them
+     * to a verse's palette would trade a law the game already has for a
+     * consistency nobody asked for.
+     *
+     * What they no longer keep is the original GEOMETRY. They carry the verse's
+     * own ledge, duotoned neutrally. The reason they used to share one hull was
+     * that it was the only plate neutral enough to multiply into either warning
+     * colour and read identically in all four worlds - and KILN's own ledge is
+     * orange, so an orange ledge tinted amber is a hazard the player cannot see
+     * coming. Geometry belongs to the verse; the colour still belongs to the
+     * law.
      *
      * The material multipliers apply to every platform including those two,
      * because a brittle ledge in KILN should be brittle whether it is fragile
@@ -873,11 +949,18 @@ export class WorldManager {
         let key = platformTextureKey(skin.id);
         let tint = 0xffffff;
         if (skin.id !== 'VERGE') {
+            // Verse geometry on a neutral plate, so the warning tints below land
+            // on something with no hue of its own. The shared hull is the
+            // fallback if that plate is somehow absent: a warning that is briefly
+            // drawn in the old style still reads as a warning, and a missing
+            // texture does not.
+            const warn = warningPlatformTextureKey(skin.id);
+            const warnKey = this.ctx.scene.textures.exists(warn) ? warn : SHARED_PLATFORM_KEY;
             if (p.surfaceProps.isCrumbling) {
-                key = 'multiverse_platform';
+                key = warnKey;
                 tint = 0xd946ef;
             } else if (p.surfaceProps.isRisk) {
-                key = 'multiverse_platform';
+                key = warnKey;
                 tint = 0xffb347;
             }
         }
