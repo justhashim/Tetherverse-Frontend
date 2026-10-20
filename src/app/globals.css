@@ -30,6 +30,45 @@ body {
   font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
 }
 
+/* The core mechanic is press-and-hold, and iOS Safari decides what a gesture
+   means before the page does.
+
+   With `touch-action: auto` - the default, and what this game shipped with - a
+   finger held down and moved a little is Safari's to interpret, not ours.
+   Measured on the running game, the canvas itself reported `touch-action: auto`,
+   so through a grapple Safari was free to:
+
+     - take the gesture over as a scroll. That fires pointercancel, which drops
+       the grapple mid-hold. The tether silently vanishes, which to the player
+       is indistinguishable from lag;
+     - collapse the URL bar. That resizes the visual viewport and makes a
+       RESIZE-mode canvas reallocate several times a second, each time paying
+       for a full re-layout and a new framebuffer;
+     - rubber-band the document, doing work on a phone that a mouse on a desktop
+       can never ask for.
+
+   `touch-action: none` on the game host ends the argument: every touch on it
+   belongs to Phaser, with no browser gesture able to win it first. It is
+   scoped rather than set globally because the leaderboard scrolls, and a
+   document-wide rule would take that away.
+
+   `overscroll-behavior: none` is the separate half and does apply document-wide.
+   There is nothing here to overscroll, so the only thing it can prevent is the
+   bounce and pull-to-refresh stealing the end of a drag - which is exactly the
+   moment a player is holding on for their life. */
+#game-container,
+#game-container canvas {
+  touch-action: none;
+  -webkit-touch-callout: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+html,
+body {
+  overscroll-behavior: none;
+}
+
 /* Every numeric readout in the game is tabular: altitude, coins, rank, the
    leaderboard column. Proportional digits make a changing number jitter, which
    reads as noise during a fast climb.
