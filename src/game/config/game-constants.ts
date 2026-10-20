@@ -409,36 +409,49 @@ export const GAME_CONSTANTS = {
         /**
          * The scale of the approach, in metres.
          *
-         * The climb is about halfway to the cruel end a couple of thousand
-         * metres above the roof, and the rest of the way is asymptotic: the
-         * mountain never quite stops getting worse and never becomes
-         * unwinnable.
+         * Small, and that is the whole dial. Pressure is (1 - e^-d/reach)², so
+         * this is the distance over which the mountain closes on the roof, and
+         * at 150 the climb has taken:
+         *
+         *   1100m -> 24%     1400m -> 87%
+         *   1200m -> 54%     1500m -> 93%
+         *   1300m -> 75%     1600m -> 96%
+         *
+         * So 1500m is where the run ends for almost everyone, which is the
+         * point. The curve is still asymptotic, so the end is a slope that
+         * steepens under a player rather than a wall they hit at a named metre
+         * - they can always see how they died and what the next notch would
+         * have been.
+         *
+         * At 2000 this read 4.9% at 1500m, which is why 1500m used to be a
+         * distance rather than a barrier: a player needed to reach 3000m to
+         * meet even 40% of what is here.
          */
-        reachMetres: 2000,
+        reachMetres: 150,
         profile: {
             widthMax: 34,                          // the narrow end is already as narrow as it can be
-            heightMin: 18, heightMax: 26,         // thinner ledges, less to land on
-            stepMin: 200, stepMax: 268,           // longer flights, less room to correct a miss
-            idealGap: 245,
+            heightMin: 14, heightMax: 20,          // thinnest ledges the landing can still forgive
+            stepMin: 230, stepMax: 310,            // long flights with nothing to correct against
+            idealGap: 300,
             horizontalRatio: 1,
-            idealHorizontal: 210,
-            anchorLiftMin: 260, anchorLiftMax: 360,
+            idealHorizontal: 265,
+            anchorLiftMin: 320, anchorLiftMax: 450, // anchors out of reach, so every save is a stretch
             recoveryChance: 0,                     // there was never a net up here
             riskChance: 1,
             reliefChance: 0,                       // no breather at all
-            chainLength: 6,                        // longer between the beats
-            voidMargin: 26,                        // the void is under your feet
+            chainLength: 8,                        // long unbroken sequences
+            voidMargin: 12,                        // the void is under your feet
         } satisfies Partial<DifficultyProfile>,
         hazard: {
-            density: 1.4,                          // every gap, and some of them twice
-            crumble: 0.55,
-            riskCrumble: 0.85,
+            density: 2.2,                          // every gap, most of them twice
+            crumble: 0.8,                          // an ordinary ledge is more likely to go than to hold
+            riskCrumble: 1,                        // the risk line is always fatal
             unstableAnchor: 1,                     // every anchor lets go
         } satisfies Partial<HazardState>,
         environment: {
-            wind: 0.0032,
-            windFrequency: 0.0034,
-            surge: 0.0019,
+            wind: 0.005,
+            windFrequency: 0.0055,
+            surge: 0.0032,
         } satisfies Partial<EnvironmentState>,
     },
     /**
@@ -485,10 +498,12 @@ export const GAME_CONSTANTS = {
         /**
          * How long an unstable anchor holds before it lets go, in milliseconds.
          *
-         * Long enough to hook and begin a swing, not long enough to finish one
-         * comfortably. The swing has to be read, not waited out.
+         * Short enough that a hook has to be spent immediately: there is no
+         * hanging on to read the swing, because hanging on is now the thing
+         * that kills you. Long enough that a correct hook still completes -
+         * this is the roof, not a dead end.
          */
-        unstableDurationMs: 1600,
+        unstableDurationMs: 1000,
     } satisfies {
         density: Record<DifficultyTier, number>;
         minGap: number;

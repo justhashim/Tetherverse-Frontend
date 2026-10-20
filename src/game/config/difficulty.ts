@@ -74,9 +74,16 @@ const ROOF_ENVIRONMENT: EnvironmentState = {
  *
  * The approach is asymptotic, because a mountain that arrives exactly at the
  * roof is a wall and not a climb: the shortfall is squared, so the climb
- * starts flat and bites, and it never quite gets there. The scale is set so
- * that the climb is about halfway to the cruel end a couple of thousand metres
- * above the roof, which is a long way for a player to be climbing.
+ * starts flat and bites, and it never quite gets there.
+ *
+ * The scale is `ROOF.reachMetres`, and it is deliberately short - 150. At
+ * that scale the climb has taken three quarters of the way by 1300m and nine
+ * tenths by 1500m, so 1500m is where a run ends for almost everyone. The
+ * curve is still a slope rather than a cliff: it keeps getting worse after
+ * 1500m, it just does so from a place almost no one reaches.
+ *
+ * It used to be 2000, which put 4.9% of the roof's cruelty at 1500m and made
+ * 1500m a distance a good player could plan for rather than a barrier.
  */
 function roofPressure(metresAboveRoof: number): number {
     const shortfall = 1 - Math.exp(-metresAboveRoof / GAME_CONSTANTS.ROOF.reachMetres);
