@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
     animate,
     motion,
@@ -81,6 +81,17 @@ const VERSES: Verse[] = [
     { numeral: "IV", name: "Null" },
 ];
 
+/**
+ * Each verse's accent, in the same order as VERSES.
+ *
+ * Mirrors `src/game/worlds/definitions.ts`, which cannot be imported here: it
+ * pulls in Phaser, and this is a client component rendering a menu. Four hex
+ * values is the whole cost of the duplication.
+ *
+ * None is cyan. Cyan is the player, and the player is not on this screen.
+ */
+const ACCENT = ["#a855f7", "#63ffb3", "#ff8a3a", "#ff2fd0"] as const;
+
 /** The entry curve. Heavy out: fast start, long settle, no overshoot. */
 const ENTER_EASE = [0.16, 1, 0.3, 1] as const;
 
@@ -95,6 +106,15 @@ export default function MainMenu({
     const playRef = useRef<HTMLButtonElement>(null);
     const recordRef = useRef<HTMLSpanElement>(null);
     const reduce = useReducedMotion();
+
+    /* --------------------------------------------------------------- focus
+       Which verse the player is pointing at, if any.
+
+       State rather than CSS `:has()`, because the thing being hovered (a name
+       in the row at the bottom) and the thing reacting (a slice of sky at the
+       top) are not nested - no selector can connect them. Four values, changed
+       only on enter and leave, so this never re-renders during a gesture. */
+    const [focusedVerse, setFocusedVerse] = useState<number | null>(null);
 
     /* ---------------------------------------------------------------- motion
        The menu is a plane in front of a world, so it behaves like one: a few
@@ -213,7 +233,7 @@ export default function MainMenu({
                 className="pointer-events-none absolute -inset-x-4 inset-y-0 overflow-hidden"
                 aria-hidden="true"
             >
-                <VerseScenes className="absolute inset-0 h-full w-full" />
+                <VerseScenes className="absolute inset-0 h-full w-full" focused={focusedVerse} />
 
                 {/* The seams, on the same quarter marks the verse names below
                     are laid out on, so the row of names and the sky above it
@@ -399,24 +419,62 @@ export default function MainMenu({
                   piece of instruction on this screen that is not repeated
                   anywhere else, and it turns four decorative strips into a
                   promise.
+
+                  These are buttons, not labels. Pointing at a name lifts that
+                  verse's slice out of the other three - the row is the only
+                  control that can reach the sky, and it is at the bottom of the
+                  screen precisely because that is where a thumb already is.
                 */}
                 <motion.nav {...stagger(5)}
                     className="mt-8 md:mt-0 grid grid-cols-4 gap-2 pt-4 border-t border-white/[0.07]"
                     aria-label="Verses">
-                    {VERSES.map((v, i) => (
-                        <div key={v.name} className="flex flex-col items-center gap-1 text-center">
-                            <span className="font-mono text-[9px] md:text-[10px] tracking-[0.3em] text-zinc-500">
-                                {v.numeral}
-                            </span>
-                            <span
-                                className={`font-mono text-[10px] md:text-[11px] uppercase tracking-[0.22em] transition-colors duration-500 ${
-                                    i === 0 ? "text-zinc-100 text-readout" : "text-zinc-500"
-                                }`}
+                    {VERSES.map((v, i) => {
+                        const active = focusedVerse === i;
+                        const lit = active || (focusedVerse === null && i === 0);
+                        return (
+                            <button
+                                key={v.name}
+                                type="button"
+                                onPointerEnter={() => setFocusedVerse(i)}
+                                onPointerLeave={() => setFocusedVerse(null)}
+                                onFocus={() => setFocusedVerse(i)}
+                                onBlur={() => setFocusedVerse(null)}
+                                className="group relative flex min-h-[44px] flex-col items-center justify-center gap-1
+                                           rounded-[var(--radius-control)] pt-1 text-center cursor-pointer
+                                           transition-transform duration-[420ms] ease-[cubic-bezier(0.16,1,0.3,1)]
+                                           hover:-translate-y-0.5 focus-visible:outline-2! focus-visible:outline-white!
+                                           focus-visible:outline-offset-2! touch-manipulation"
                             >
-                                {v.name}
-                            </span>
-                        </div>
-                    ))}
+                                <span
+                                    className={`font-mono text-[9px] md:text-[10px] tracking-[0.3em] transition-colors duration-500 ${
+                                        lit ? "text-zinc-300" : "text-zinc-600"
+                                    }`}
+                                >
+                                    {v.numeral}
+                                </span>
+                                <span
+                                    className={`font-mono text-[10px] md:text-[11px] uppercase tracking-[0.22em] transition-colors duration-500 ${
+                                        lit ? "text-zinc-100 text-readout" : "text-zinc-500 group-hover:text-zinc-300"
+                                    }`}
+                                >
+                                    {v.name}
+                                </span>
+
+                                {/* The verse's own accent, under the name only while
+                                    it is the one being looked at. Never cyan. */}
+                                <span
+                                    aria-hidden="true"
+                                    className="absolute -bottom-px left-1/2 h-px w-0 -translate-x-1/2
+                                               transition-[width,opacity] duration-[420ms] ease-[cubic-bezier(0.16,1,0.3,1)]"
+                                    style={{
+                                        background: ACCENT[i],
+                                        opacity: active ? 0.9 : 0,
+                                        width: active ? "62%" : "0%",
+                                    }}
+                                />
+                            </button>
+                        );
+                    })}
                 </motion.nav>
             </div>
         </div>

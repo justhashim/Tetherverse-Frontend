@@ -162,6 +162,204 @@ body {
   }
 }
 
+/* ---------------------------------------------------------------- ambient
+   Each verse gets its own weather.
+
+   The drift above is shared depth - four planes settling at four speeds. What
+   it is not is four *places*: a settling backdrop is scenery, and scenery does
+   not breathe. These give each verse the one motion that names it, chosen so
+   that killing the colour would still leave four distinguishable skies.
+
+   VERGE   light shafts sweeping the hull, because the origin verse is a place
+           with a light source and a floor, and distortion is what a dimension
+           at its edge does to light.
+   BLOOM   spores lifting off the canopy, which is the only motion an overgrown
+           world has that a forest does not.
+   KILN   embers rising off a foundry, fast and short-lived, with the heat
+           band beneath them pulsing on a different clock.
+   NULL    the sky displacing in horizontal slices. Stepped, not eased: a
+           dropped frame has no curve.
+
+   Transform and opacity only, so every one of these lives on the compositor
+   and none of them repaint a pixel. They collapse with everything else under
+   prefers-reduced-motion via the universal block in design-tokens.css. */
+
+/* VERGE: a soft band crossing the slice, brightest through the middle of its
+   run so it reads as passing light rather than sliding furniture. */
+@keyframes verse-shaft {
+  0% {
+    transform: translate3d(-45%, 0, 0);
+    opacity: 0;
+  }
+  25% {
+    opacity: 0.7;
+  }
+  75% {
+    opacity: 0.7;
+  }
+  100% {
+    transform: translate3d(45%, 0, 0);
+    opacity: 0;
+  }
+}
+
+/* BLOOM: a spore lifting, drifting sideways on its own current, gone by the
+   time it clears the canopy. --drift varies per mote so they never march. */
+@keyframes verse-spore {
+  0% {
+    transform: translate3d(0, 0, 0);
+    opacity: 0;
+  }
+  15% {
+    opacity: 0.85;
+  }
+  80% {
+    opacity: 0.5;
+  }
+  100% {
+    transform: translate3d(var(--drift, 10px), var(--travel, -140px), 0);
+    opacity: 0;
+  }
+}
+
+/* BLOOM: the canopy breathing. Separate clock from the spores on purpose. */
+@keyframes verse-canopy {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+    opacity: 0.28;
+  }
+  50% {
+    transform: translate3d(0, -1.2%, 0) scale(1.04);
+    opacity: 0.5;
+  }
+}
+
+/* KILN: an ember. Rises faster and further than a spore, and does not drift
+   as far sideways - hot air goes up, it does not wander. */
+@keyframes verse-ember {
+  0% {
+    transform: translate3d(0, 0, 0);
+    opacity: 0;
+  }
+  8% {
+    opacity: 1;
+  }
+  60% {
+    opacity: 0.85;
+  }
+  100% {
+    transform: translate3d(var(--drift, -6px), var(--travel, -220px), 0);
+    opacity: 0;
+  }
+}
+
+/* KILN: the furnace band, pulsing on its own clock. */
+@keyframes verse-furnace {
+  0%,
+  100% {
+    opacity: 0.3;
+  }
+  38% {
+    opacity: 0.62;
+  }
+  52% {
+    opacity: 0.38;
+  }
+}
+
+/* NULL: the sky losing its grip. Stepped between explicit stops, because an
+   eased glitch is a tween and a glitch is a discontinuity. */
+@keyframes verse-glitch {
+  0%,
+  46%,
+  58%,
+  100% {
+    transform: translate3d(0, 0, 0);
+    opacity: 0;
+  }
+  47% {
+    transform: translate3d(var(--gx, 7px), 0, 0);
+    opacity: 0.6;
+  }
+  51% {
+    transform: translate3d(calc(var(--gx, 7px) * -1), 0, 0);
+    opacity: 0.35;
+  }
+  55% {
+    transform: translate3d(calc(var(--gx, 7px) * 0.4), 0, 0);
+    opacity: 0.5;
+  }
+}
+
+/* NULL: the display's refresh rolling down the slice once in a while. */
+@keyframes verse-roll {
+  0%,
+  70%,
+  100% {
+    transform: translate3d(0, -100%, 0);
+    opacity: 0;
+  }
+  76% {
+    opacity: 0.5;
+  }
+  88% {
+    opacity: 0.4;
+  }
+  94% {
+    transform: translate3d(0, 900%, 0);
+    opacity: 0;
+  }
+}
+
+/* ------------------------------------------------------------- focus state
+   Hovering or tabbing a verse lifts it out of the wall of four.
+
+   The illumination is a scrim in the verse's own accent rising behind the
+   silhouette, plus a couple of pixels of depth on the layer stack - enough
+   that the slice reads as nearer, not enough to uncover an edge, which is why
+   the scale goes up inside an already-overhanging container. Everything else
+   recedes a step. */
+.verse-slice {
+  transition:
+    opacity 500ms cubic-bezier(0.16, 1, 0.3, 1),
+    filter 500ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.verse-slice[data-dimmed='true'] {
+  opacity: 0.5;
+  filter: saturate(0.72);
+}
+
+.verse-slice .verse-depth {
+  transition: transform 620ms cubic-bezier(0.16, 1, 0.3, 1);
+  will-change: transform;
+}
+
+.verse-slice[data-focus='true'] .verse-depth {
+  transform: scale(1.045);
+}
+
+.verse-slice .verse-illum {
+  opacity: 0;
+  transition: opacity 520ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.verse-slice[data-focus='true'] .verse-illum {
+  opacity: 1;
+}
+
+/* The rim light along the lit slice's inner edge. This is the verse's own
+   accent, never cyan: cyan is the player and the player is not here yet. */
+.verse-slice .verse-rim {
+  opacity: 0;
+  transition: opacity 480ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.verse-slice[data-focus='true'] .verse-rim {
+  opacity: 0.85;
+}
+
 /* Custom Minimalist High-Performance Scrollbar Logic for Telemetry Columns */
 .custom-scrollbar::-webkit-scrollbar {
   width: 5px;
