@@ -71,10 +71,15 @@ body {
    which sets duration to 0.01ms and iteration to 1 - the ring ends on its first
    frame rather than hanging.
 
-   The skies behind it do not use keyframes at all. Four drifting environments
-   cannot be expressed as transforms on spans without becoming a fog of
-   elements, and a fog of elements is exactly what a phone cannot afford
-   underneath a menu; they are drawn on a canvas instead. */
+   The skies behind it do use keyframes - two of them, for the whole backdrop -
+   which is a change of mind rather than a change of rule. The old note here said
+   four drifting environments could not be expressed as transforms without
+   becoming "a fog of elements", and so they were drawn on a canvas instead. But
+   a canvas with a rAF loop repaints every one of those pixels on the main thread
+  , thirty times a second, forever; sixteen divs moving on `transform` repaint
+   none of them, because the compositor shifts textures that already exist. The
+   element count was never the cost - the per-frame work was. VerseScenes.tsx
+   has the geometry. */
 @keyframes breathe {
   0% {
     transform: scale(0.98);
@@ -86,6 +91,35 @@ body {
   100% {
     transform: scale(1.45);
     opacity: 0;
+  }
+}
+
+/* The four skies. Each layer travels to `--amp`, set per layer in VerseScenes,
+   so one pair of keyframes drives all of them at different distances; the
+   difference between their amplitudes and durations is the parallax.
+
+   `alternate` rather than a return leg of its own, so a layer that reaches the
+   end of its travel eases back instead of snapping - at 44 to 110 seconds a
+   cycle the reversal is not perceptible, but a discontinuity would be.
+
+   They collapse to a single static frame under prefers-reduced-motion via the
+   universal block in design-tokens.css, which is what leaves the art still
+   legible without the motion. */
+@keyframes verse-settle {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    transform: translate3d(0, var(--amp, 4%), 0);
+  }
+}
+
+@keyframes verse-rise {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    transform: translate3d(0, calc(var(--amp, 4%) * -1), 0);
   }
 }
 
