@@ -193,7 +193,8 @@ export default function Home() {
     return (
       <main className="relative w-screen min-h-[100dvh] h-[100dvh] overflow-hidden flex flex-col items-center justify-center p-6 select-none">
         <MultiverseBackground />
-        <div className="relative z-10 w-full max-w-md bg-slate-950/80 border border-rose-500/30 rounded-[var(--radius-panel)] p-8 text-center backdrop-blur-xl">
+        {/* No backdrop-blur: measured 33 -> 39 fps in WebKit when stripped (390x844@dpr3); Chromium 60fps either way. */}
+        <div className="relative z-10 w-full max-w-md bg-slate-950/80 border border-rose-500/30 rounded-[var(--radius-panel)] p-8 text-center">
           <h1 className="text-xl font-black text-white tracking-tight uppercase mb-2">
             Session link failed
           </h1>
@@ -240,7 +241,8 @@ export default function Home() {
           decorated a mark that does not need decorating, and the green pip
           under the button announced a gateway that was never a gateway.
         */}
-        <div className="relative z-10 w-full max-w-md bg-slate-950/75 border border-zinc-800 rounded-[var(--radius-panel)] p-8 md:p-10 backdrop-blur-xl text-center flex flex-col items-center">
+        {/* No backdrop-blur: the sign-in card measured 33 -> 39 fps in WebKit when stripped (390x844@dpr3); Chromium 60fps either way. */}
+        <div className="relative z-10 w-full max-w-md bg-slate-950/75 border border-zinc-800 rounded-[var(--radius-panel)] p-8 md:p-10 text-center flex flex-col items-center">
           <NextImage
             src="/logo.png"
             alt="Tetherverse Logo"
