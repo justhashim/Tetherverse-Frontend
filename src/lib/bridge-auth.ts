@@ -34,10 +34,21 @@ declare global {
 
 /** Origins allowed to deliver an AUTH_TOKEN message. */
 function launcherOrigins(): string[] {
-    return (process.env.NEXT_PUBLIC_LAUNCHER_ORIGIN || 'http://localhost:3000')
+    const configured = (process.env.NEXT_PUBLIC_LAUNCHER_ORIGIN ?? '')
         .split(',')
-        .map((origin) => origin.trim())
+        .map((origin) => origin.trim().replace(/\/+$/, ''))
         .filter(Boolean);
+
+    // Fail closed. With no launcher configured there is no origin that should be
+    // trusted to hand us an identity, and returning a permissive default here
+    // would mean the allowlist silently became "whatever is listening on the
+    // local launcher port" for as long as the variable stayed unset - including
+    // in a production build, where it would be a real attacker-reachable
+    // address on a real player's machine. The local launcher is assumed in
+    // development only, so the embed flow stays testable without a secret.
+    if (configured.length) return configured;
+
+    return process.env.NODE_ENV !== 'production' ? ['http://localhost:3000'] : [];
 }
 
 /** True when this document is running inside a parent frame. */

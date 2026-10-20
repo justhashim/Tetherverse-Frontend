@@ -286,6 +286,30 @@ export class WorldManager {
         this.nextPortalAltitude = Math.min(this.nextPortalAltitude, this.ctx.altitudeMeters() + 10);
     }
 
+    /**
+     * Development only: drop straight into a verse.
+     *
+     * The honest route is a climb through four gates, which is the right way to
+     * play and a terrible way to check whether KILN's ledges read as slag. This
+     * calls {@link startTransition} - the same method a gate crossing calls - so
+     * the reveal card, the 600ms re-materialisation and the re-theming are all
+     * the production path. Only the climbing is skipped, and only the art is
+     * being looked at.
+     *
+     * Returns false for a name that is not a world, so a typo is silent rather
+     * than a crash in the middle of a run.
+     */
+    public debugJumpTo(id: string): boolean {
+        const to = WORLDS[id.toUpperCase() as keyof typeof WORLDS];
+        if (!to || to.id === this.current.id) return false;
+        // A jump mid-flight would drop the in-progress transition on the floor
+        // and strand the player re-materialising inside whatever the old verse
+        // had there. Refuse instead; the next press will land.
+        if (this.transition) return false;
+        this.startTransition(to);
+        return true;
+    }
+
     // =====================================================================
     //  Overlays. Every one of these lives at or below OVERLAY_DEPTH.
     // =====================================================================
