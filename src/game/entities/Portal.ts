@@ -1,6 +1,5 @@
 import Phaser from 'phaser';
-import { portalCoreKey, portalRingKey } from '../worlds/theming';
-import { SKINS, type SkinId } from '../worlds/definitions';
+import { PORTAL_CORE_KEY, PORTAL_RING_KEY } from '../worlds/theming';
 
 /**
  * A gate between verses.
@@ -51,22 +50,16 @@ export class Portal {
         this.radius = radius;
         this.targetSkin = targetSkin;
 
-        // The gate is drawn in the shape of the VERSE IT LEADS TO, so a player
-        // reading the horizon sees where they are going before they get there:
-        // a corolla ahead means Bloom, a furnace mouth means Kiln. The art is
-        // white and tinted to the accent, so the colour still lands on the game
-        // object and the SILHOUETTE is what carries the difference.
-        const skin: SkinId = (targetSkin in SKINS ? targetSkin : 'VERGE') as SkinId;
-
         // The core is additive and behind the ring so the gate reads as a hole
-        // with light coming out of it rather than a decal.
-        this.core = scene.add.image(x, y, portalCoreKey(skin))
+        // with light coming out of it rather than a decal. Both are white art
+        // tinted to the verse's accent, so one texture serves every gate.
+        this.core = scene.add.image(x, y, PORTAL_CORE_KEY)
             .setDepth(38)
             .setTint(accent)
             .setBlendMode(Phaser.BlendModes.ADD)
             .setDisplaySize(radius * 2.3, radius * 2.3);
 
-        this.ring = scene.add.image(x, y, portalRingKey(skin))
+        this.ring = scene.add.image(x, y, PORTAL_RING_KEY)
             .setDepth(40)
             .setTint(accent)
             .setDisplaySize(radius * 2.2, radius * 2.2);

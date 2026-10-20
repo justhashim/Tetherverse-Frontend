@@ -10,7 +10,7 @@ import { LevelGenerator } from "../levels/LevelGenerator";
 // through this type; see the field declaration below for why it is a single
 // boundary rather than a set of scattered hooks.
 import { WorldManager, type WorldContext } from "../worlds/WorldManager";
-import { preloadAllSkinArt, tetherStyleFor, type TetherStyle } from "../worlds/theming";
+import { preloadAllSkinArt } from "../worlds/theming";
 
 /**
  * Vertical speed below which the player counts as settled rather than flying past.
@@ -736,12 +736,8 @@ export class GameScene extends Scene {
         } else {
             const core = fray > 0 ? 0xff0055 : 0x00ffcc;
 
-            // The world supplies the energy wrapped round the line. The core
-            // below is deliberately never touched: cyan is the player's, and a
-            // verse that could recolour the rope would be recolouring the one
-            // object on screen that has to stay findable.
-            const skinId = this.worldManager?.getCurrentWorld().skin.id ?? 'VERGE';
-            this.drawTetherGlow(tetherStyleFor(skinId), startX, startY, targetX, targetY, fray);
+            this.tetherGraphics.lineStyle(8, 0xff007f, 0.4);
+            this.drawTetherRun(startX, startY, targetX, targetY, fray);
 
             this.tetherGraphics.lineStyle(4, core, 0.8);
             this.drawTetherRun(startX, startY, targetX, targetY, fray);
@@ -749,99 +745,6 @@ export class GameScene extends Scene {
             this.tetherGraphics.lineStyle(1.5, 0xffffff, 1.0);
             this.drawTetherRun(startX, startY, targetX, targetY, fray);
         }
-    }
-
-    /**
-     * The outer pass, which is where a verse gets to say something.
-     *
-     * Four structures rather than four colours, because four colours of the
-     * same straight line is the recolouring this was meant to end: BLOOM's
-     * casing is two filaments crossing the same span, KILN's is a chain with
-     * couplers barred across it, NULL's is segments each pushed off the line
-     * by a different amount, VERGE's is one milled, even sleeve.
-     *
-     * While the rope is frayed every pattern collapses to the solid run, so
-     * the gaps line up with the gaps in the core and the rope still reads as
-     * worn through rather than as decoratively dashed.
-     *
-     * Nothing here draws the core, and nothing here is cyan.
-     */
-    private drawTetherGlow(
-        style: TetherStyle,
-        startX: number,
-        startY: number,
-        targetX: number,
-        targetY: number,
-        fray: number
-    ): void {
-        if (fray > 0) {
-            this.tetherGraphics.lineStyle(style.glowWidth, style.glow, 0.4);
-            this.drawTetherRun(startX, startY, targetX, targetY, fray);
-            return;
-        }
-
-        const dx = targetX - startX;
-        const dy = targetY - startY;
-        const len = Math.hypot(dx, dy) || 1;
-        // Unit normal to the run, for anything that has to sit off the line.
-        const nx = -dy / len;
-        const ny = dx / len;
-
-        if (style.pattern === 'braid') {
-            for (const offset of [-3.5, 3.5]) {
-                this.tetherGraphics.lineStyle(Math.max(3, style.glowWidth * 0.5), style.glow, 0.3);
-                this.tetherGraphics.lineBetween(
-                    startX + nx * offset, startY + ny * offset,
-                    targetX + nx * offset, targetY + ny * offset
-                );
-            }
-            return;
-        }
-
-        if (style.pattern === 'coupled') {
-            this.tetherGraphics.lineStyle(3, style.glow, 0.32);
-            this.tetherGraphics.lineBetween(startX, startY, targetX, targetY);
-
-            const links = Math.max(2, Math.round(len / 220));
-            for (let i = 1; i < links; i++) {
-                const t = i / links;
-                const px = startX + dx * t;
-                const py = startY + dy * t;
-                const reach = style.glowWidth * 0.85;
-                this.tetherGraphics.lineStyle(4, style.glow, 0.7);
-                this.tetherGraphics.lineBetween(
-                    px - nx * reach, py - ny * reach,
-                    px + nx * reach, py + ny * reach
-                );
-            }
-            return;
-        }
-
-        if (style.pattern === 'glitch') {
-            const pieces = Math.max(4, Math.round(len / 90));
-            for (let i = 0; i < pieces; i++) {
-                const t0 = i / pieces;
-                const t1 = (i + 1) / pieces;
-                // Deterministic offset, not per-frame noise: the displacement
-                // has to hold still frame to frame or the line turns to static.
-                const push = (((i * 37) % 11) - 5) * 1.7;
-                const drop = i % 3 === 0;
-                this.tetherGraphics.lineStyle(
-                    style.glowWidth * (drop ? 0.5 : 0.85),
-                    style.glow,
-                    drop ? 0.25 : 0.5
-                );
-                this.tetherGraphics.lineBetween(
-                    startX + dx * t0 + nx * push, startY + dy * t0 + ny * push,
-                    startX + dx * t1 + nx * push, startY + dy * t1 + ny * push
-                );
-            }
-            return;
-        }
-
-        // solid: VERGE's even sleeve, and the shape the fray case falls back to.
-        this.tetherGraphics.lineStyle(style.glowWidth, style.glow, 0.4);
-        this.drawTetherRun(startX, startY, targetX, targetY, fray);
     }
 
     /**
