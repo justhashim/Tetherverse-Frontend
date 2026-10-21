@@ -194,7 +194,7 @@ export default function LeaderboardPanel({ onClose, currentUserId }: Leaderboard
                             <h2 className="text-xl md:text-2xl font-black tracking-tight text-white uppercase">
                                 Leaderboard
                             </h2>
-                            <p className="text-xs font-mono text-zinc-500 tracking-wider mt-1 tabular">
+                            <p className="text-xs font-mono text-zinc-400 tracking-wider mt-1 tabular">
                                 {loading
                                     ? 'Reading records'
                                     : `${leaders.length} climber${leaders.length === 1 ? '' : 's'} tracked`}
@@ -209,7 +209,7 @@ export default function LeaderboardPanel({ onClose, currentUserId }: Leaderboard
                         <button
                             ref={closeRef}
                             onClick={onClose}
-                            className="flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-[0.2em] text-zinc-500 hover:text-zinc-100 transition-[color] duration-150 cursor-pointer select-none"
+                            className="flex items-center min-h-11 gap-1.5 font-mono text-[11px] uppercase tracking-[0.2em] text-zinc-400 hover:text-zinc-100 transition-[color] duration-150 cursor-pointer select-none touch-manipulation"
                         >
                             <span className="text-[9px] text-zinc-600 border border-white/10 rounded-[3px] px-1 py-px">ESC</span>
                             <span>Close</span>
@@ -246,7 +246,7 @@ export default function LeaderboardPanel({ onClose, currentUserId }: Leaderboard
                                         ? 'Lost connection to telemetry'
                                         : 'Telemetry service unavailable'}
                                 </p>
-                                <p className="font-mono text-xs text-zinc-500">
+                                <p className="font-mono text-xs text-zinc-400">
                                     {error === 'network'
                                         ? 'Check your network and reopen this panel.'
                                         : 'The leaderboard could not be read. Try again shortly.'}
@@ -257,7 +257,7 @@ export default function LeaderboardPanel({ onClose, currentUserId }: Leaderboard
                                 <p className="text-zinc-300 font-mono text-sm">
                                     No ascent records yet
                                 </p>
-                                <p className="text-zinc-500 font-mono text-xs">
+                                <p className="text-zinc-400 font-mono text-xs">
                                     The first climb sets the mark everyone chases.
                                 </p>
                             </div>

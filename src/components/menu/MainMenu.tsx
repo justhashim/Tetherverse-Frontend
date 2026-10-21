@@ -44,6 +44,34 @@ function LeaderboardIcon() {
 }
 
 /**
+ * The way to the board.
+ *
+ * One control, rendered in two places: the centre of the top bar on a wide
+ * screen, and under the record on a phone. It used to be `hidden sm:flex`,
+ * which meant the board had no entry point at all on the platform this game is
+ * built for - the one screen in the product with a ranking on it was reachable
+ * only from a desktop.
+ *
+ * The hit area is a full 44px tall even though the label is 10px, because the
+ * right-hand column it sits in is in the top corner where a thumb can still
+ * reach on a large handset, and a text link is not a target.
+ */
+function LeaderboardLink({ onClick, className = "" }: { onClick: () => void; className?: string }) {
+    return (
+        <button
+            onClick={onClick}
+            type="button"
+            className={`group inline-flex min-h-[44px] items-center gap-2.5 font-mono text-[10px] sm:text-[11px] uppercase tracking-[0.22em] text-zinc-400 hover:text-zinc-100 transition-[color] duration-150 cursor-pointer select-none touch-manipulation ${className}`}
+        >
+            <span className="text-zinc-500 transition-colors duration-150 group-hover:text-zinc-300">
+                <LeaderboardIcon />
+            </span>
+            Leaderboard
+        </button>
+    );
+}
+
+/**
  * One corner of the instrument frame.
  *
  * A short pair of hairlines, inset from the viewport. Four of them turn the
@@ -201,7 +229,7 @@ export default function MainMenu({
     });
 
     const wordmarkText =
-        "block font-black leading-[0.84] tracking-[-0.045em] text-[clamp(2rem,6.5vw,5rem)]";
+        "block font-black leading-[0.84] tracking-[-0.045em] text-[clamp(2.4rem,11vw,5rem)] short:text-[2.5rem]";
 
     return (
         <div
@@ -273,12 +301,33 @@ export default function MainMenu({
             </motion.div>
 
             {/* -------------------------------------------------------- content
-                On a phone the middle band is sunk with `mt-auto` rather than
-                centred. Vertical centring puts the control at half the screen
-                height, which on a tall handset is the top of the thumb's arc.
-                Sunk, it lands where a thumb already is - which is the whole point
-                of a one-button game. The desktop spreads the three bands. */}
-            <div className="relative h-full flex flex-col px-7 pt-7 pb-[calc(1.75rem+env(safe-area-inset-bottom))] md:px-12 md:py-11 md:justify-between">
+                The phone composition is three bands with the sky between them:
+                identity at the top, the name directly beneath it, the control
+                sunk into the thumb's arc, the route along the bottom.
+
+                The name used to be glued to the control and the pair sunk
+                together, which left a single 400px gap above the name - half a
+                phone screen of nothing, and nothing on the other side of it to
+                make it read as space. A void is a composition only when it is
+                bounded above; here the world gets the middle of the screen and
+                the two anchors sit at the two ends.
+
+                The control still lands in the same place. It is `mt-auto`
+                inside the middle band rather than `mt-auto` on it, so the band
+                stretches and the disc keeps the bottom of its travel.
+
+                The split is `lg`, not `md`. A tablet in portrait is still a
+                touch screen held in two hands, and centring the band put the
+                only control at 53% of the screen - a reach, not a press. The
+                phone composition carries through the tablet widths; desktop
+                centring starts where the pointer does. */}
+            <div className="relative h-full flex flex-col
+                            pl-[calc(1.75rem+env(safe-area-inset-left))] pr-[calc(1.75rem+env(safe-area-inset-right))]
+                            pt-[calc(1.75rem+env(safe-area-inset-top))] pb-[calc(1.75rem+env(safe-area-inset-bottom))]
+                            md:pl-[calc(3rem+env(safe-area-inset-left))] md:pr-[calc(3rem+env(safe-area-inset-right))]
+                            md:pt-[calc(2.75rem+env(safe-area-inset-top))] md:pb-[calc(2.75rem+env(safe-area-inset-bottom))]
+                            short:pt-[calc(1.25rem+env(safe-area-inset-top))] short:pb-[calc(1.25rem+env(safe-area-inset-bottom))]
+                            md:justify-between">
 
                 {/* Top band: who is playing, the way to the board, what they've done. */}
                 <motion.header {...stagger(0)}
@@ -286,32 +335,30 @@ export default function MainMenu({
                     <ProfileCard user={user} onLogout={onLogout} />
 
                     <div className="hidden sm:flex items-center">
-                        <button
-                            onClick={onOpenLeaderboard}
-                            className="group inline-flex items-center gap-2.5 font-mono text-[11px] uppercase tracking-[0.22em] text-zinc-500 hover:text-zinc-100 transition-[color] duration-150 cursor-pointer select-none touch-manipulation"
-                        >
-                            <span className="text-zinc-600 transition-colors duration-150 group-hover:text-zinc-300">
-                                <LeaderboardIcon />
-                            </span>
-                            Leaderboard
-                        </button>
+                        <LeaderboardLink onClick={onOpenLeaderboard} />
                     </div>
 
                     <div className="flex flex-col items-end text-right">
-                        <span className="font-mono text-[10px] md:text-[11px] uppercase tracking-[0.28em] text-zinc-500">Best</span>
+                        <span className="font-mono text-[10px] md:text-[11px] uppercase tracking-[0.28em] text-zinc-400">Best</span>
                         <span className="flex items-baseline gap-1 text-readout">
                             <span ref={recordRef}
                                 className="font-mono font-semibold tabular text-2xl md:text-3xl text-zinc-50 leading-tight">0</span>
                             <span className="font-mono text-sm text-zinc-400">m</span>
                         </span>
-                        <span className="font-mono text-[10px] md:text-[11px] uppercase tracking-[0.24em] text-zinc-500">
+                        <span className="font-mono text-[10px] md:text-[11px] uppercase tracking-[0.24em] text-zinc-400">
                             {bestAltitude > 0 ? stratum : "No record"}
                         </span>
+                        {/* The phone's way to the board. On a wide screen the
+                            same control lives in the middle of the bar above,
+                            where there is room for it; here it closes the
+                            record column instead of taking a row of its own
+                            from the sky. */}
+                        <LeaderboardLink onClick={onOpenLeaderboard} className="sm:hidden" />
                     </div>
                 </motion.header>
 
-                {/* Middle band: the name, then the control beneath it. */}
-                <div className="mt-auto flex flex-col items-center justify-center gap-y-6 md:mt-0">
+                {/* Middle band: the name at one end, the control at the other. */}
+                <div className="mt-7 flex flex-1 flex-col items-center gap-y-6 short:mt-3 lg:mt-0 lg:justify-center">
 
                     {/*
                       The name, in one piece.
@@ -342,7 +389,7 @@ export default function MainMenu({
                     {/* ------------------------------------------------ the disc */}
                     <motion.div
                         style={{ x: controlX, y: controlY }}
-                        className="flex flex-col items-center"
+                        className="mt-auto flex flex-col items-center lg:mt-0"
                     >
                         {/*
                           The climb.
@@ -389,7 +436,7 @@ export default function MainMenu({
                                 className="pointer-events-none absolute inset-0 rounded-full animate-[breathe_4.5s_cubic-bezier(0.16,1,0.3,1)_infinite]" />
 
                             <span
-                                className="grid place-items-center w-32 h-32 md:w-44 md:h-44 rounded-full
+                                className="grid place-items-center w-32 h-32 short:w-28 short:h-28 md:w-44 md:h-44 rounded-full
                                            bg-cyan-400 text-slate-950
                                            shadow-[0_0_72px_-16px_rgba(34,211,238,0.6),inset_0_1px_1px_rgba(255,255,255,0.45)]
                                            transition-[background-color,box-shadow] duration-[350ms]
@@ -397,7 +444,7 @@ export default function MainMenu({
                                            group-hover:bg-cyan-300 group-hover:shadow-[0_0_104px_-10px_rgba(34,211,238,0.85),inset_0_1px_1px_rgba(255,255,255,0.55)]"
                             >
                                 <svg viewBox="0 0 24 24"
-                                    className="w-10 h-10 md:w-14 md:h-14 translate-x-[7%] transition-transform duration-[420ms] ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:translate-x-[15%]"
+                                    className="w-10 h-10 short:w-8 short:h-8 md:w-14 md:h-14 translate-x-[7%] transition-transform duration-[420ms] ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:translate-x-[15%]"
                                     fill="currentColor" aria-hidden="true" focusable="false">
                                     <path d="M8 5.14v13.72c0 .81.88 1.3 1.55.84l10.78-6.86a1 1 0 0 0 0-1.68L9.55 4.3A1 1 0 0 0 8 5.14z" />
                                 </svg>
@@ -405,7 +452,7 @@ export default function MainMenu({
                         </motion.button>
 
                         <motion.p {...stagger(4)}
-                            className="mt-6 font-mono text-[10px] md:text-[11px] uppercase tracking-[0.24em] text-zinc-500 text-center text-readout">
+                            className="mt-6 font-mono text-[10px] md:text-[11px] uppercase tracking-[0.24em] text-zinc-300 [text-shadow:0_1px_10px_rgba(2,4,8,0.95)] text-center text-readout short:hidden">
                             Hold to grapple · release to launch
                         </motion.p>
                     </motion.div>
@@ -426,7 +473,7 @@ export default function MainMenu({
                   screen precisely because that is where a thumb already is.
                 */}
                 <motion.nav {...stagger(5)}
-                    className="mt-8 md:mt-0 grid grid-cols-4 gap-2 pt-4 border-t border-white/[0.07]"
+                    className="mt-8 lg:mt-0 grid grid-cols-4 gap-2 pt-4 short:mt-4 short:pt-1 border-t border-white/[0.07]"
                     aria-label="Verses">
                     {VERSES.map((v, i) => {
                         const active = focusedVerse === i;
@@ -454,7 +501,7 @@ export default function MainMenu({
                                 </span>
                                 <span
                                     className={`font-mono text-[10px] md:text-[11px] uppercase tracking-[0.22em] transition-colors duration-500 ${
-                                        lit ? "text-zinc-100 text-readout" : "text-zinc-500 group-hover:text-zinc-300"
+                                        lit ? "text-zinc-100 text-readout" : "text-zinc-400 group-hover:text-zinc-200"
                                     }`}
                                 >
                                     {v.name}

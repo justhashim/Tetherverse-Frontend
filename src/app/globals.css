@@ -1,6 +1,14 @@
 @import "tailwindcss";
 @import "./design-tokens.css";
 
+/* A phone held sideways is wide and 390px tall; a short laptop window is the
+   same problem with a pointer. Neither can carry the portrait composition's
+   full-size disc plus hint plus route row. `short:` is that viewport, and it
+   trims the vertical stack rather than the content: the climb stays the
+   largest object, the route stays reachable, and the hint - which the menu
+   already states in portrait - is the one thing that folds away. */
+@custom-variant short (@media (orientation: landscape) and (max-height: 620px));
+
 /* The game is dark-only by design: a night sky with cyan instrumentation on it.
    There is no light theme, because a light version of this would be a different
    product rather than a different skin. The old prefers-color-scheme block

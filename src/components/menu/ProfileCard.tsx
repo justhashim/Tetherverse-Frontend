@@ -74,9 +74,12 @@ export default function ProfileCard({ user, onLogout }: ProfileCardProps) {
                 <span className="text-[15px] font-semibold text-zinc-100 tracking-tight leading-tight truncate max-w-36 md:max-w-48 text-readout">
                     {user.name}
                 </span>
+                {/* The label stays on the name's baseline, but the button is a
+                    full 44px tall: the empty half below the text is the rest of
+                    the target, not decoration. A text link is not a target. */}
                 <button
                     onClick={onLogout}
-                    className="self-start font-mono text-[11px] uppercase tracking-[0.2em] text-zinc-500 hover:text-zinc-200 transition-[color] duration-150 cursor-pointer"
+                    className="self-start flex items-start min-h-11 font-mono text-[11px] uppercase tracking-[0.2em] text-zinc-400 hover:text-zinc-100 transition-[color] duration-150 cursor-pointer touch-manipulation"
                 >
                     Sign out
                 </button>
