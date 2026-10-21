@@ -636,8 +636,25 @@ export class GameScene extends Scene {
             // mistake that can be seen and recovered from rather than an
             // instant loss, with the tier's void margin on top deciding how
             // generous that is at altitude.
+            //
+            // This test is deliberately NOT gated on `isHooked`, unlike the
+            // backstop below. The exemption existed so a player swinging on a
+            // tether could not be killed by the screen edge, but the void is
+            // not the screen edge, and `isHooked` is a bare flag that nothing
+            // validates against the rope or the anchor still being there. A
+            // stale one handed the player back to the base check alone - a
+            // fall of some fifteen thousand pixels from the roof, through air
+            // with nothing in it, alive the whole way down.
+            //
+            // It costs nothing to be absolute here, because the tether cannot
+            // reach: the rope is 380px and stretches to at most 513px when
+            // frayed all the way, while the slack below is a view-height plus
+            // the void margin - 1612px at the tightest. No player hanging from
+            // a rope they are actually attached to can ever be this far below
+            // their own peak, so this cannot end a swing. It can only end a
+            // fall.
             const deathLine = this.runLowestY + this.viewHeight + this.levelGenerator.voidMargin;
-            if (!isHooked && this.player.y > deathLine && this.player.body.velocity.y > 0) {
+            if (this.player.y > deathLine && this.player.body.velocity.y > 0) {
                 this.handlePlayerFailure();
                 return;
             }
