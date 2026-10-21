@@ -23,7 +23,10 @@ interface AltitudeDetail {
 function getZoneDot(zone: string): string {
     switch (zone) {
         case 'TROPOSPHERE':
-            return 'bg-cyan-400';
+            // Not cyan. Cyan is the player, and a 7px dot labelling a band of
+            // air is not the player - it only became the loudest cyan in the
+            // HUD once the altimeter stopped wearing that colour.
+            return 'bg-lime-400';
         case 'STRATOSPHERE':
             return 'bg-violet-400';
         case 'MESOSPHERE':
@@ -119,9 +122,24 @@ export default function GameHUD({ onAbort }: GameHUDProps) {
                     </div>
 
                     {/* The value. Big, tabular, and the brightest thing on the
-                        screen: the altitude is the player's own live presence,
-                        so it wears the signal colour. The label beside it is
-                        dimmer than the number by an order of magnitude.
+                        screen. White, not cyan.
+
+                        It used to wear the signal colour on the theory that the
+                        altitude is the player's own live presence. But the law
+                        is not that the player's data may share the player's
+                        colour - it is that cyan is the player and nothing else,
+                        because the moment another element takes it the player
+                        stops being findable on a busy sky. The player is a
+                        small sprite and this number is sixty pixels tall
+                        directly above it. Two cyan objects, one of them
+                        enormous, is the exact outcome the law exists to stop,
+                        reached through a loophole in its wording.
+
+                        White is also what the game already does everywhere else
+                        with a measured value: the leaderboard column, the
+                        menu's own score readout, the sector best on the
+                        game-over panel. The label beside it is dimmer than the
+                        number by an order of magnitude.
 
                         Sixty pixels, not seventy-two. On a 1440-wide desktop the
                         readout used to be the size of a headline, and it was
@@ -132,10 +150,10 @@ export default function GameHUD({ onAbort }: GameHUDProps) {
                         <span className="font-mono text-[11px] font-bold uppercase tracking-[0.3em] text-zinc-500 text-readout">
                             Alt
                         </span>
-                        <span className="font-mono font-black text-5xl md:text-6xl leading-none tracking-tight text-cyan-300 tabular text-readout">
+                        <span className="font-mono font-black text-5xl md:text-6xl leading-none tracking-tight text-white tabular text-readout">
                             {altitude.toLocaleString().padStart(4, '0')}
                         </span>
-                        <span className="font-mono text-sm font-bold text-cyan-400/70 text-readout">
+                        <span className="font-mono text-sm font-bold text-zinc-500 text-readout">
                             m
                         </span>
                     </div>
@@ -145,11 +163,13 @@ export default function GameHUD({ onAbort }: GameHUDProps) {
                         multiverse. */}
                     <div className="font-mono text-[11px] uppercase tracking-[0.25em] text-zinc-500 text-readout">
                         {isNewRecord ? (
-                            <span className="inline-flex items-center gap-1.5 font-bold text-cyan-300">
+                            <span className="inline-flex items-center gap-1.5 font-bold text-amber-300">
                                 {/* A rising bar rather than a lightning glyph: same
                                     idea, drawn in the game's own accent, and it
                                     inherits colour instead of shipping an emoji
-                                    font's artwork. */}
+                                    font's artwork. Amber, not cyan: a personal
+                                    best is a reward, and the game's reward
+                                    colour is the coin. */}
                                 <svg
                                     width="10"
                                     height="10"
