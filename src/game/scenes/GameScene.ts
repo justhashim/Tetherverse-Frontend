@@ -653,8 +653,16 @@ export class GameScene extends Scene {
             // a rope they are actually attached to can ever be this far below
             // their own peak, so this cannot end a swing. It can only end a
             // fall.
+            //
+            // The old condition also asked for `velocity.y > 0`, so the void
+            // killed you only on the way DOWN through it and not for being
+            // inside it. That is the wrong shape for something called a void:
+            // it made being there survivable whenever the player was not
+            // actively descending, and settling on a ledge is exactly how a
+            // player stops descending. Falling below the line is fatal
+            // because of where the player is, not which way they are moving.
             const deathLine = this.runLowestY + this.viewHeight + this.levelGenerator.voidMargin;
-            if (this.player.y > deathLine && this.player.body.velocity.y > 0) {
+            if (this.player.y > deathLine) {
                 this.handlePlayerFailure();
                 return;
             }
