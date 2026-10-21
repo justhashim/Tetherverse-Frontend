@@ -133,6 +133,61 @@ body {
   }
 }
 
+/* ============================================================================
+   Game-over motion
+   ============================================================================
+   Two keyframes, both on the overlay that replaces the run.
+
+   The world behind has already stopped - `matter.world.pause()` and an early
+   return in update() - so anything still moving here is not the game, it is
+   the fact of having fallen. The rain rises: the player is going down, and
+   the only way to show that against a frozen frame is to move everything
+   else past them. The bloom breathes at the foot of the screen where the
+   controls are, so the eye is drawn down toward the one thing still worth
+   pressing.
+
+   Neither is decoration doing a job it was not asked for - the count-up on the
+   altitude is what explains the state, and these are the room it happens in.
+
+   Both are transforms and opacity, so the compositor moves textures that
+   already exist and the main thread does nothing. That matters more than it
+   sounds: this is the screen the run's last frame is sitting behind, and the
+   previous version stacked two backdrop-blurs over it. Stripping a single
+   backdrop-blur was worth six frames a second on the sign-in card (33 -> 39 in
+   WebKit), so there are none here.
+
+   They collapse to one static frame under prefers-reduced-motion via the
+   universal block in design-tokens.css; the rain parks below the fold and the
+   bloom holds its base opacity. */
+@keyframes void-fall {
+  0% {
+    transform: translate3d(0, 0, 0);
+    opacity: 0;
+  }
+  9% {
+    opacity: 1;
+  }
+  86% {
+    opacity: 1;
+  }
+  100% {
+    transform: translate3d(0, -165vh, 0);
+    opacity: 0;
+  }
+}
+
+@keyframes void-breathe {
+  0%,
+  100% {
+    transform: scaleY(1);
+    opacity: 0.6;
+  }
+  50% {
+    transform: scaleY(1.14);
+    opacity: 1;
+  }
+}
+
 /* The four skies. Each layer travels to `--amp`, set per layer in VerseScenes,
    so one pair of keyframes drives all of them at different distances; the
    difference between their amplitudes and durations is the parallax.

@@ -116,6 +116,18 @@ export class GameScene extends Scene {
 
     private runLowestY: number = 0; // Tracks the highest point reached THIS run to move the death-zone up
 
+    /**
+     * The personal best as it stood before this run began.
+     *
+     * `maxAltitudeMeters` is raised by the run itself while the player climbs,
+     * so by the time the run ends it already contains this run's own peak. Any
+     * question of the form "was this a record?" asked against it compares the
+     * peak with itself and always answers no - which is why the game-over
+     * screen has never once shown its New record mark. This holds the number
+     * the player was actually chasing.
+     */
+    private bestBeforeRun: number = 0;
+
     private isGameOver: boolean = false;
     private cameraFollowOffsetX: number = 0;
     private lastHazardImpactTime: number = 0;
@@ -139,6 +151,10 @@ export class GameScene extends Scene {
         } catch {
             // Silently ignore
         }
+
+        // Snapshot before the run can touch it. The cloud fetch below is seeded
+        // afterwards so a higher stored best reaches this snapshot too.
+        this.bestBeforeRun = this.maxAltitudeMeters;
 
         // 🚀 Fire off the background fetch to sync with the cloud
         this.loadDatabaseHighScore();
@@ -176,6 +192,16 @@ export class GameScene extends Scene {
             if (!response.ok) return;
 
             const data = await response.json();
+
+            // The cloud is also reporting a pre-run value, and it can land well
+            // after the player has started climbing. Raised unconditionally
+            // rather than only when it beats the live figure: a cloud best that
+            // the run has already overtaken is still the best that existed when
+            // the run began, and dropping it would announce a record the player
+            // had in fact already broken on an earlier visit.
+            if (data?.success && typeof data.maxAltitude === 'number') {
+                this.bestBeforeRun = Math.max(this.bestBeforeRun, data.maxAltitude);
+            }
 
             // If the cloud score is higher than what the local game thinks...
             if (data.success && data.maxAltitude > this.maxAltitudeMeters) {
@@ -1057,6 +1083,11 @@ export class GameScene extends Scene {
                 detail: {
                     altitude: peakMeters,
                     best: this.maxAltitudeMeters,
+                    // Carried separately from `best`, because they are different
+                    // questions. `best` is where the player stands now; this is
+                    // where they stood before the run, and only the difference
+                    // between them says whether this climb beat anything.
+                    bestBefore: this.bestBeforeRun,
                     coins: this.bankedCoins,
                     // Reported so the overlay can say what was lost, rather than the
                     // player wondering where the coins they just swept up went.
