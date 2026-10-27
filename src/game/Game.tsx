@@ -2,12 +2,16 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { Game as PhaserGame } from "phaser";
+import type { ServerRun } from "@/src/lib/server-run";
+import { setCurrentRun } from "./run-session";
 
 interface GameProps {
   isActive?: boolean;
+  /** The server-issued run this game instance is building. */
+  run?: ServerRun | null;
 }
 
-export default function Game({ isActive = true }: GameProps) {
+export default function Game({ isActive = true, run = null }: GameProps) {
   const gameRef = useRef<PhaserGame | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [isReady, setIsReady] = useState(false);
@@ -47,6 +51,18 @@ export default function Game({ isActive = true }: GameProps) {
         // Check if the component unmounted while downloading the library
         if (isDestroyed) return;
 
+        // A new run means a new world, and the cleanest way to guarantee that
+        // is a new game. GameScene registers a Matter `collisionstart` listener
+        // in create() and never removes it on shutdown, so restarting the
+        // scene would stack a second listener on the same physics world; only
+        // a fresh game runs create() exactly once per run.
+        setCurrentRun(run);
+
+        // The old game was destroyed by the previous effect's cleanup, so the
+        // new one is booting from scratch. Say so, rather than showing a live
+        // HUD over a canvas that has not drawn its first frame yet.
+        setIsReady(false);
+
         if (!gameRef.current && containerRef.current) {
           gameRef.current = new Phaser.Game({
             ...gameConfig,
@@ -77,8 +93,14 @@ export default function Game({ isActive = true }: GameProps) {
         gameRef.current.destroy(true);
         gameRef.current = null;
       }
+      // The scene is gone, so there is nothing left for a stale run to seed.
+      setCurrentRun(null);
     };
-  }, []);
+    // The run's identity is what decides which world this game builds. The
+    // object is replaced wholesale by the page whenever a run starts, so
+    // depending on it recreates the game on every new run and never on an
+    // unrelated re-render.
+  }, [run]);
 
   return (
     <div className="relative w-screen h-screen overflow-hidden">

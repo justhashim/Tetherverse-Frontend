@@ -1,0 +1,26 @@
+import type { ServerRun } from '@/src/lib/server-run';
+
+/**
+ * The run the Phaser scene should build.
+ *
+ * A module-level store rather than a constructor argument: `Phaser.Game` is
+ * created from React, but the scene is instantiated by Phaser's own boot
+ * sequence, so there is no convenient prop to thread through. The value is set
+ * immediately before `new Phaser.Game(...)` and read in `GameScene.create()`,
+ * which runs exactly once per game instance.
+ *
+ * A fresh game is created for every run rather than restarting the scene,
+ * because GameScene registers a Matter `collisionstart` listener in `create()`
+ * without removing it on shutdown; a restart would stack a second listener on
+ * the same world. That means the store only ever has to describe one run at a
+ * time.
+ */
+let currentRun: ServerRun | null = null;
+
+export function setCurrentRun(run: ServerRun | null): void {
+    currentRun = run;
+}
+
+export function getCurrentRun(): ServerRun | null {
+    return currentRun;
+}

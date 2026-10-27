@@ -11,6 +11,8 @@ import { LevelGenerator } from "../levels/LevelGenerator";
 // boundary rather than a set of scattered hooks.
 import { WorldManager, type WorldContext } from "../worlds/WorldManager";
 import { preloadAllSkinArt } from "../worlds/theming";
+import { getCurrentRun } from "../run-session";
+import { readClientAccessToken, type ServerRun } from "@/src/lib/server-run";
 
 /**
  * Vertical speed below which the player counts as settled rather than flying past.
@@ -111,6 +113,20 @@ export class GameScene extends Scene {
      */
     private pendingCoins: number = 0;
     private bankedCoins: number = 0;
+
+    /**
+     * Coins banked during THIS run, as distinct from the persistent total.
+     *
+     * The score submission is about one run: `bankedCoins` is the player's
+     * lifetime balance seeded from the cloud, and sending it back as this run's
+     * haul would credit the same coins again on every climb. This counter is
+     * reset when a run begins and is the only number the submission sends.
+     */
+    private runBankedCoins: number = 0;
+
+    /** The server-issued run this scene is building, if any. */
+    private serverRun: ServerRun | null = null;
+
     private currentAltitudeMeters: number = 0; // Live altitude used to pick the difficulty tier
     private levelSeed: number = 0;
 
@@ -138,6 +154,13 @@ export class GameScene extends Scene {
     }
 
     init() {
+        // The server owns the run's identity and its world. A fresh game is
+        // created for every run, so reading the store here captures exactly
+        // the run this scene belongs to; a null means development or an
+        // unscored boot, which falls back to a local seed.
+        this.serverRun = getCurrentRun();
+        this.runBankedCoins = 0;
+
         // Keep the local storage check as a fast-loading fallback!
         // It prevents the score from showing '0m' for half a second while the database loads.
         try {
@@ -179,9 +202,7 @@ export class GameScene extends Scene {
             // This endpoint needs a verified Excel Play identity, so it must carry
             // the same bearer the score save uses. Without the header the request
             // is always 401 and the database best never seeds maxAltitudeMeters.
-            const bridgeToken = typeof window !== 'undefined'
-                ? window.__tetherverseAuthToken
-                : null;
+            const bridgeToken = readClientAccessToken();
 
             const response = await fetch('/api/score', {
                 headers: bridgeToken ? { Authorization: `Bearer ${bridgeToken}` } : {},
@@ -423,7 +444,14 @@ export class GameScene extends Scene {
         // Handcrafted intro above; from here-on the world is generated forever.
         // The generator owns `this.platforms` (shared reference) and seeds the
         // tutorial hook anchors, keeping culling and reachability in one place.
-        this.levelSeed = this.generateLevelSeed();
+        //
+        // The server picked the seed when it opened the run, so every client
+        // builds the same mountain for the same attempt. The local seed is only
+        // for a scene with no run behind it - development, or the pre-warmed
+        // canvas the menu mounts before play.
+        this.levelSeed = this.serverRun
+            ? this.serverRun.seed >>> 0
+            : this.generateLevelSeed();
         this.levelGenerator = new LevelGenerator(
             this,
             this.platforms,
@@ -444,8 +472,11 @@ export class GameScene extends Scene {
         this.playerIsFrayed = false;
 
         // Banked coins carry over between runs; pending coins do not, since the
-        // mountain that held them is about to be rebuilt.
+        // mountain that held them is about to be rebuilt. The run's own haul
+        // starts at zero even though the persistent total does not: only what
+        // is banked during this climb is submitted at the end of it.
         this.pendingCoins = 0;
+        this.runBankedCoins = 0;
 
         // Listen for collision with Cosmic Hazard sensor bodies
         this.matter.world.on('collisionstart', (event: Phaser.Physics.Matter.Events.CollisionStartEvent) => {
@@ -1058,9 +1089,16 @@ export class GameScene extends Scene {
         const peakPixels = (this.groundReferenceY - this.runLowestY) - 20;
         const peakMeters = Math.max(0, Math.floor(peakPixels / 10));
 
-        // 1. Capture and save the high score immediately before anything is destroyed
-        if (this.maxAltitudeMeters) {
-            this.saveHighScore(this.maxAltitudeMeters, this.bankedCoins);
+        // 1. Capture and save this run's score immediately before anything is
+        //    destroyed. `peakMeters` is where THIS climb reached and
+        //    `runBankedCoins` is what it banked - not the personal best and not
+        //    the lifetime coin total, both of which belong to other runs.
+        if (this.serverRun && peakMeters > 0) {
+            void this.submitRunScore(
+                this.serverRun.runId,
+                peakMeters,
+                this.runBankedCoins,
+            );
         }
 
         // 2. Destroy the previous engine runtime references to safely unbind old event listeners 
@@ -1205,6 +1243,7 @@ export class GameScene extends Scene {
         if (this.pendingCoins === 0) return;
 
         this.bankedCoins += this.pendingCoins;
+        this.runBankedCoins += this.pendingCoins;
         this.pendingCoins = 0;
     }
 
@@ -1253,48 +1292,74 @@ export class GameScene extends Scene {
         return (Date.now() ^ ((Math.random() * 0x100000000) >>> 0)) >>> 0;
     }
 
-    // Saving high scores to the database (called on game over)
-    private async saveHighScore(finalAltitude: number, coins: number) {
+    /**
+     * Finalises the run with the API.
+     *
+     * `peakMeters` is this run's peak altitude and `coins` is this run's banked
+     * haul; both are scoped to the run, never to the player's record. The run
+     * id is what makes the number checkable: the API rejects an id that belongs
+     * to someone else, has already been submitted, has expired, or was
+     * replaced by a newer start.
+     */
+    private async submitRunScore(
+        runId: string,
+        peakMeters: number,
+        coins: number,
+    ) {
         try {
-            // When embedded in the Excel Play launcher the token arrives by postMessage
-            // rather than from a sign-in redirect, and there is no session cookie,
-            // so it travels as a bearer. The scene is not a React component, so the
-            // token is read from the global that the auth hooks maintain.
-            const bridgeToken = typeof window !== 'undefined'
-                ? window.__tetherverseAuthToken
-                : null;
+            const accessToken = readClientAccessToken();
 
             const response = await fetch('/api/score', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    ...(bridgeToken ? { Authorization: `Bearer ${bridgeToken}` } : {}),
+                    ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
                 },
                 body: JSON.stringify({
+                    runId,
                     // The column the score lands in is a 32-bit integer, so a
                     // run that somehow climbed past its ceiling is reported at
                     // the ceiling: a score that does not fit is a score that
                     // was never saved.
                     score: Math.min(
-                        Math.floor(finalAltitude),
+                        Math.floor(peakMeters),
                         GAME_CONSTANTS.WORLD.MAX_ALTITUDE_METERS
                     ),
-                    // Banked coins only. Pending ones were earned on the mountain
-                    // and the run just ended, so they are lost with it.
+                    // Coins banked THIS run only. Pending ones were earned on
+                    // the mountain and the run just ended, so they are lost with
+                    // it, and the lifetime total is not this run's haul.
                     coins: Math.floor(coins),
                 })
             });
 
-            const data = await response.json();
+            const data = await response.json().catch(() => null);
 
-            if (data.updated) {
+            if (!response.ok) {
+                // A duplicate (409) or an expired run (410) is a normal race,
+                // not a game failure: the score was already recorded or the
+                // attempt outlived its window, and either way there is nothing
+                // for the player to retry.
+                if (response.status === 409) {
+                    console.debug('[tetherverse] run already submitted');
+                } else if (response.status === 410) {
+                    console.debug('[tetherverse] run expired before submission');
+                } else {
+                    console.error(
+                        '[tetherverse] score rejected',
+                        response.status,
+                        data,
+                    );
+                }
+                return;
+            }
+
+            if (data?.updated) {
                 console.debug('[tetherverse] new best saved', data.maxAltitude);
-                // You could trigger a Phaser UI text here saying "NEW RECORD!"
             }
 
             // The server holds the authoritative total, so adopt it rather than
             // trusting the local count.
-            if (data.success && typeof data.coins === 'number') {
+            if (data?.success && typeof data.coins === 'number') {
                 this.bankedCoins = data.coins;
                 this.pendingCoins = 0;
             }

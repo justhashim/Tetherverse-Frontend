@@ -21,6 +21,10 @@ interface MainMenuProps {
     bestAltitude?: number;
     /** True when the menu is the screen in front of the player. */
     active?: boolean;
+    /** True while the server is opening a run for this climb. */
+    starting?: boolean;
+    /** Why the last attempt to open a run failed, if it did. */
+    error?: string | null;
 }
 
 /**
@@ -130,6 +134,8 @@ export default function MainMenu({
     user,
     bestAltitude = 0,
     active = false,
+    starting = false,
+    error = null,
 }: MainMenuProps) {
     const playRef = useRef<HTMLButtonElement>(null);
     const recordRef = useRef<HTMLSpanElement>(null);
@@ -419,6 +425,8 @@ export default function MainMenu({
                             onClick={onPlay}
                             type="button"
                             aria-label="Begin ascent"
+                            aria-busy={starting}
+                            disabled={starting}
                             initial={{ opacity: 0, scale: 0.88 }}
                             animate={{ opacity: 1, scale: 1 }}
                             transition={{ duration: 0.8, ease: ENTER_EASE, delay: 0.52 }}
@@ -430,7 +438,10 @@ export default function MainMenu({
                                        hover:bg-white/[0.14] hover:ring-white/45
                                        active:scale-[0.97]
                                        focus-visible:outline-2! focus-visible:outline-white! focus-visible:outline-offset-4! focus-visible:rounded-full!
-                                       cursor-pointer select-none touch-manipulation"
+                                       cursor-pointer select-none touch-manipulation
+                                       disabled:cursor-wait disabled:opacity-70
+                                       disabled:hover:bg-white/[0.09] disabled:hover:ring-white/25
+                                       disabled:active:scale-100"
                         >
                             <span aria-hidden="true"
                                 className="pointer-events-none absolute inset-0 rounded-full animate-[breathe_4.5s_cubic-bezier(0.16,1,0.3,1)_infinite]" />
@@ -453,8 +464,26 @@ export default function MainMenu({
 
                         <motion.p {...stagger(4)}
                             className="mt-6 font-mono text-[10px] md:text-[11px] uppercase tracking-[0.24em] text-zinc-300 [text-shadow:0_1px_10px_rgba(2,4,8,0.95)] text-center text-readout short:hidden">
-                            Hold to grapple · release to launch
+                            {starting ? "Opening the run" : "Hold to grapple · release to launch"}
                         </motion.p>
+
+                        {/*
+                          The failure to open a run is stated here, beside the
+                          control that caused it, rather than as a toast: the
+                          player has to know the climb did not start and that
+                          nothing they do on the mountain would have counted.
+                        */}
+                        {error && (
+                            <motion.p
+                                role="alert"
+                                initial={{ opacity: 0, y: 6 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                transition={{ duration: 0.3, ease: ENTER_EASE }}
+                                className="mt-3 max-w-[280px] text-center font-mono text-[11px] leading-relaxed tracking-[0.04em] text-rose-300 [text-shadow:0_1px_10px_rgba(2,4,8,0.95)]"
+                            >
+                                {error}
+                            </motion.p>
+                        )}
                     </motion.div>
                 </div>
 

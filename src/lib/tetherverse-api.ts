@@ -140,11 +140,32 @@ export const tetherverseApi = {
     getScore: (authorization: string | null) =>
         forward('/score', { method: 'GET', authorization }),
 
-    postScore: (authorization: string | null, score: number, coins = 0) =>
+    /**
+     * Opens a run and returns the server's identity and seed for it.
+     *
+     * No body: the API derives the player from the bearer, picks the run id and
+     * the seed itself, and replaces any run that player already had open.
+     */
+    startRun: (authorization: string | null) =>
+        forward('/runs', { method: 'POST', authorization }),
+
+    /**
+     * Finalises one run.
+     *
+     * `runId` is the only id the API will accept for this attempt, so a token
+     * alone is no longer enough to write a score. `score` is this run's peak and
+     * `coins` is this run's banked haul, not the player's persistent total.
+     */
+    postScore: (
+        authorization: string | null,
+        runId: string,
+        score: number,
+        coins = 0,
+    ) =>
         forward('/score', {
             method: 'POST',
             authorization,
-            body: JSON.stringify({ score, coins }),
+            body: JSON.stringify({ runId, score, coins }),
         }),
 
     getLeaderboard: () => forward('/leaderboard', { method: 'GET' }),

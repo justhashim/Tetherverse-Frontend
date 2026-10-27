@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { MotionConfig } from "framer-motion";
 import NextImage from "next/image";
 import GameCanvas from "@/src/components/GameCanvas";
@@ -12,6 +12,7 @@ import LeaderboardPanel from "@/src/components/leaderboard/LeaderboardPanel";
 import MultiverseBackground from "@/src/components/menu/MultiverseBackground";
 import { useExcelSession } from "@/src/lib/excel-auth-client";
 import { useBridgeAuth } from "@/src/lib/bridge-auth";
+import { startServerRun, type ServerRun } from "@/src/lib/server-run";
 
 type AppState = 'menu' | 'playing' | 'leaderboard';
 
@@ -50,6 +51,16 @@ export default function Home() {
   const [currentView, setCurrentView] = useState<AppState>('menu');
   const [gameOver, setGameOver] = useState<GameOverData | null>(null);
   const [gameKey, setGameKey] = useState(0);
+  // The run the server opened for this attempt. Nothing can be scored without
+  // one, so play and rerun both wait for it before touching the canvas.
+  const [run, setRun] = useState<ServerRun | null>(null);
+  const [runError, setRunError] = useState<string | null>(null);
+  const [isStartingRun, setIsStartingRun] = useState(false);
+  // Refs, not state, for the guards: a second click in the same tick would see
+  // an unchanged `isStartingRun` and start a second run, replacing the first
+  // one on the server before the player ever reaches the mountain.
+  const startingRunRef = useRef(false);
+  const runRequestRef = useRef(0);
   // The menu is on screen from the first frame. The game canvas is not: it is
   // mounted a moment later, behind the menu, so the engine is warm and its
   // assets are cached by the time the player reaches for the play disc. It used
@@ -67,16 +78,65 @@ export default function Home() {
 
   const handleLogout = excelSession.logout;
 
-  const handleRerun = () => {
+  /**
+   * Opens a run on the server, or reports why it could not.
+   *
+   * A climb with no run behind it cannot be scored, so this is a gate rather
+   * than a background detail: the caller only moves the player into the game
+   * once a run exists. The request id makes the result cancellable - leaving
+   * for the launcher while a start is in flight must not drop a run onto the
+   * menu when it lands.
+   */
+  const beginRun = useCallback(async (): Promise<ServerRun | null> => {
+    if (startingRunRef.current) return null;
+
+    startingRunRef.current = true;
+    const requestId = ++runRequestRef.current;
+    setIsStartingRun(true);
+    setRunError(null);
+
+    try {
+      const nextRun = await startServerRun();
+      if (requestId !== runRequestRef.current) return null;
+      setRun(nextRun);
+      return nextRun;
+    } catch (error) {
+      if (requestId !== runRequestRef.current) return null;
+      setRunError(
+        error instanceof Error
+          ? error.message
+          : 'Could not start this climb. Try again.',
+      );
+      return null;
+    } finally {
+      startingRunRef.current = false;
+      setIsStartingRun(false);
+    }
+  }, []);
+
+  const handlePlay = useCallback(async () => {
+    const nextRun = await beginRun();
+    if (!nextRun) return;
+    setCurrentView('playing');
+  }, [beginRun]);
+
+  const handleRerun = useCallback(async () => {
+    const nextRun = await beginRun();
+    if (!nextRun) return;
     setGameOver(null);
     setGameKey((k) => k + 1);
-  };
+  }, [beginRun]);
 
-  const handleExitToLauncher = () => {
+  const handleExitToLauncher = useCallback(() => {
+    // Invalidate any start still in flight, and drop the run: the next climb
+    // must be opened against a fresh server run, not resumed from this one.
+    runRequestRef.current += 1;
+    setRun(null);
+    setRunError(null);
     setGameOver(null);
     setGameKey((k) => k + 1);
     setCurrentView('menu');
-  };
+  }, []);
 
   // Sync best altitude from live altitude updates
   useEffect(() => {
@@ -117,7 +177,7 @@ export default function Home() {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [gameOver]);
+  }, [gameOver, handleRerun, handleExitToLauncher]);
 
   // Eagerly pre-warm heavy game engine modules and assets in the background
   useEffect(() => {
@@ -286,12 +346,14 @@ export default function Home() {
               }`}
           >
             <MainMenu
-              onPlay={() => setCurrentView('playing')}
+              onPlay={handlePlay}
               onOpenLeaderboard={() => setCurrentView('leaderboard')}
               onLogout={handleLogout}
               user={identity}
               bestAltitude={bestAltitude}
               active={currentView === 'menu'}
+              starting={isStartingRun}
+              error={runError}
             />
           </div>
         )}
@@ -322,7 +384,7 @@ export default function Home() {
               : "z-10 opacity-0 pointer-events-none"
               }`}
           >
-            <GameCanvas key={gameKey} isActive={currentView === 'playing'} />
+            <GameCanvas key={gameKey} isActive={currentView === 'playing'} run={run} />
 
             {/*
               The HUD goes when the run does. It was still mounted behind the
