@@ -1,3 +1,10 @@
+# This is a single-package repo, but the file has to declare a workspace.
+# pnpm 9 (which Cloudflare Workers Builds selects by default) rejects a
+# workspace file with no `packages` key: "packages field missing or empty".
+# pnpm 12 tolerates the omission locally, which is why this only failed in CI.
+packages:
+  - "."
+
 allowBuilds:
   # Required by the Cloudflare toolchain, all of it dev-only.
   #
