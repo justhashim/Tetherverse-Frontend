@@ -71,10 +71,12 @@ and a caller over its rate limit (429, with `Retry-After`).
 
 ### Deploying
 
-The frontend and the backend must ship together. A frontend that still posts
-`{ score, coins }` gets a validation error from the new API, and an older API
-does not have `POST /runs` at all, so a new frontend cannot start a climb. There
-is no compatible overlap window: deploy the API first, then the frontend.
+The frontend and the backend must ship together, after `db/schema.sql` has been
+applied. A frontend that still posts `{ score, coins }` gets a validation error
+from the new API, and an older API does not have `POST /runs` at all, so a new
+frontend cannot start a climb. Neither order has a compatible overlap window:
+API-first breaks saves from the old frontend, and frontend-first breaks play on
+the old API.
 
 ### Remaining limitation
 
