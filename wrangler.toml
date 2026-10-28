@@ -22,15 +22,19 @@ compatibility_flags = ["nodejs_compat"]
 # it, so it never reaches the browser and the API cannot be discovered from the
 # client bundle.
 #
-# Currently Render, which is the only deployment of this API that exists. Swap
-# the address below for the Cloud Run one when that is live; nothing else in the
-# app changes.
+# A variable rather than a literal in the code: one module reads it
+# (src/lib/tetherverse-api.ts), there is no production fallback, and a missing
+# address is a 502 with a logged reason instead of a silent call to localhost.
+#
+# The value below is the Cloud Run deployment in asia-southeast1. To move the
+# API, edit this line and redeploy; or edit the same variable in the dashboard,
+# which takes effect on the next request with no deploy and no rebuild.
 #
 # `wrangler secret put TETHERVERSE_API_URL` works too, and keeps the value out of
 # this file, at the cost of not being reviewable in a diff.
 
 [vars]
-TETHERVERSE_API_URL = "https://tetherverse-api.onrender.com"
+TETHERVERSE_API_URL = "https://tetherverse-backend-46039623481.asia-southeast1.run.app"
 
 # ── Build configuration ─────────────────────────────────────────────────────
 #

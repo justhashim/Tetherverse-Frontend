@@ -78,28 +78,33 @@ frontend cannot start a climb. Neither order has a compatible overlap window:
 API-first breaks saves from the old frontend, and frontend-first breaks play on
 the old API.
 
-**Configuration lives in Cloudflare, not in this repository.** No production
-environment file is committed, and none needs to be:
+**Configuration is split by when it is read.** Two files, each holding only what
+belongs there:
 
-| Variable | Where it goes | When it is read |
+| Variable | Where it lives | When it is read |
 |---|---|---|
-| `NEXT_PUBLIC_EXCEL_AUTH_FRONTEND_URL` | Worker > Settings > Build (variable) | build, inlined into the client |
-| `NEXT_PUBLIC_LAUNCHER_ORIGIN` | Worker > Settings > Build (variable) | build, inlined into the client |
-| `TETHERVERSE_API_URL` | `wrangler.toml` `[vars]`, or `wrangler secret put` | runtime, every request |
+| `NEXT_PUBLIC_EXCEL_AUTH_FRONTEND_URL` | `.env`, committed | build, inlined into the client |
+| `NEXT_PUBLIC_LAUNCHER_ORIGIN` | `.env`, committed | build, inlined into the client |
+| `TETHERVERSE_API_URL` | `wrangler.toml` `[vars]`, or a dashboard variable | runtime, every request |
 
-The two `NEXT_PUBLIC_*` values have to exist when the build runs, because they
-are compiled into the bundle — the launcher origin is what the CSP allows to
-frame the game, so a build without it produces a Worker the launcher cannot
-embed. `TETHERVERSE_API_URL` is deliberately not part of the build: it is read
-per request, so the API can move without rebuilding the app. With it unset the
-API routes answer 502 and log the reason.
+The two `NEXT_PUBLIC_*` values are in `.env` because the build cannot run without
+them: they are compiled into the bundle, and the launcher origin is what the CSP
+allows to frame the game. A build without them produces a Worker the launcher
+cannot embed, which is why `scripts/build-worker.mjs` refuses rather than ships
+that. They are not secrets — both are origins the browser is told anyway — so
+committing them costs nothing and removes a dashboard step that every fresh
+clone would otherwise have to repeat.
 
-It currently points at the Render deployment, which is the only one that exists.
-When the API lands on Cloud Run, the change is that one line in `wrangler.toml` —
-or the same variable in the dashboard, which applies without a deploy at all.
+`TETHERVERSE_API_URL` is deliberately *not* in `.env`. It is read per request
+from the Worker's own configuration, so relocating the backend is an edit to one
+line (or to the dashboard variable, which applies with no deploy and no rebuild).
+A copy in `.env` would be baked into the deployed Worker by OpenNext and would
+silently take over whenever the Worker variable went missing. With it unset the
+API routes answer 502 and log the reason instead of calling localhost.
 
-For a local build, `.env.local` or an ignored `env.prod` supplies the same
-values; `env.example` documents each one.
+For a local run, `.env.local` (ignored) outranks `.env`, and `env.example`
+documents the developer-only knobs. `env.prod` is an optional, ignored
+convenience for `pnpm build` on a machine that wants different values.
 
 ### Remaining limitation
 

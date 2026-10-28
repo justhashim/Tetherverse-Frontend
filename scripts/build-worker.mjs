@@ -20,15 +20,19 @@
  * does not, and it must stay out of the build: a value here would be copied
  * into the Worker as a default and stop the address being changeable.
  *
- * Locally, `env.prod` (ignored, optional) or `.env.local` supplies the same
- * values. This script reads `env.prod` when it exists and puts it in the
- * environment before the build starts, which outranks every `.env` file Next.js
- * reads. Failing both, the values are looked for in the env files Next itself
- * would read, so a working local setup is not forced to duplicate them here.
+ * Locally, `.env` (committed) carries the two public origins, so a fresh clone
+ * builds without any setup. `env.prod` (ignored, optional) or `.env.local`
+ * overrides them for one machine; both are read here first, which outranks every
+ * `.env` file Next.js reads.
  *
- * Building with none of the above is refused: the bundle would otherwise ship
- * with no launcher origin, and the CSP would lock the app out of the frame it
- * is meant to run in.
+ * The two NEXT_PUBLIC values are inlined into the client bundle, so they have to
+ * exist when this runs. TETHERVERSE_API_URL is read at request time by the
+ * Worker, so it does not: its value lives in `wrangler.toml` [vars], and a copy
+ * here would be baked into the Worker as a default instead.
+ *
+ * Building with neither is refused: the bundle would otherwise ship with no
+ * launcher origin, and the CSP would lock the app out of the frame it is meant
+ * to run in.
  */
 
 import { spawn } from 'node:child_process';
