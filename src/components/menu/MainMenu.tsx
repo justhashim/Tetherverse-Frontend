@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from "react";
+import Image from "next/image";
 import {
     animate,
     motion,
@@ -552,6 +553,37 @@ export default function MainMenu({
                         );
                     })}
                 </motion.nav>
+
+                {/*
+                  The sponsor.
+
+                  The bottom edge, under the route, is where a credit belongs:
+                  it is on the screen for the whole session and it is never in
+                  the way of the one control. The mark is white on transparency,
+                  so it sits directly on the sky - a plate behind it would be a
+                  second panel in a composition that has exactly one.
+
+                  Not a link. A credit that navigates is a way to lose a player
+                  mid-menu, and nothing here needs to go anywhere.
+
+                  It is `h-4` rather than a headline: the sponsor is named, not
+                  announced. The label carries the meaning, the mark confirms
+                  it, and neither competes with the name above.
+                */}
+                <motion.div {...stagger(6)}
+                    className="mt-5 short:mt-2 flex items-center justify-center gap-3">
+                    <span className="font-mono text-[9px] uppercase tracking-[0.28em] text-zinc-400
+                                     [text-shadow:0_1px_10px_rgba(2,4,8,0.95)] md:text-[10px]">
+                        Sponsored by
+                    </span>
+                    <Image
+                        src="/images/studyin-logo.webp"
+                        alt="StudyIn"
+                        width={480}
+                        height={106}
+                        className="h-4 w-auto short:h-3.5 md:h-5"
+                    />
+                </motion.div>
             </div>
         </div>
     );
