@@ -24,6 +24,15 @@ compatibility_flags = ["nodejs_compat"]
 #
 # `wrangler secret put TETHERVERSE_API_URL` works too, and keeps the value out
 # of this file, at the cost of not being reviewable in a diff.
+#
+# ── Build configuration ─────────────────────────────────────────────────────
+#
+# The NEXT_PUBLIC_* origins are not here and cannot be: they are inlined into
+# the client bundle at build time, so they belong to Workers Builds (dashboard:
+# Settings > Build), not to the running Worker. The repo commits neither them
+# nor an env.prod, so no deployed origin lives in a public diff. A build without
+# them is refused by scripts/build-worker.mjs rather than shipping empty CSP
+# frame-ancestors.
 
 [assets]
 directory = ".open-next/assets"

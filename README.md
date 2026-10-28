@@ -78,6 +78,25 @@ frontend cannot start a climb. Neither order has a compatible overlap window:
 API-first breaks saves from the old frontend, and frontend-first breaks play on
 the old API.
 
+**Configuration lives in Cloudflare, not in this repository.** No production
+environment file is committed, and none needs to be:
+
+| Variable | Where it goes | When it is read |
+|---|---|---|
+| `NEXT_PUBLIC_EXCEL_AUTH_FRONTEND_URL` | Worker > Settings > Build (variable) | build, inlined into the client |
+| `NEXT_PUBLIC_LAUNCHER_ORIGIN` | Worker > Settings > Build (variable) | build, inlined into the client |
+| `TETHERVERSE_API_URL` | `wrangler.toml` `[vars]`, or `wrangler secret put` | runtime, every request |
+
+The two `NEXT_PUBLIC_*` values have to exist when the build runs, because they
+are compiled into the bundle — the launcher origin is what the CSP allows to
+frame the game, so a build without it produces a Worker the launcher cannot
+embed. `TETHERVERSE_API_URL` is deliberately not part of the build: it is read
+per request, so the API can move without rebuilding the app. With it unset the
+API routes answer 502 and log the reason.
+
+For a local build, `.env.local` or an ignored `env.prod` supplies the same
+values; `env.example` documents each one.
+
 ### Remaining limitation
 
 The simulation still runs in the browser. The run id and the seed give the API

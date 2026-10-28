@@ -39,9 +39,14 @@ yarn-error.log*
 # env files (can opt-in for committing if needed)
 .env*
 
-# `env.prod` and `env.example` have no leading dot, so `.env*` does not match them.
-# Neither holds a secret: every value is a URL or a browser-visible origin. They are
-# committed on purpose so a production config is reviewable in a diff.
+# Every deployed value is set in Cloudflare: build variables for the
+# NEXT_PUBLIC_* origins, a Worker variable for the API address. Nothing here
+# names a deployed origin, a backend address, or a secret, so a public diff
+# never has to carry one.
+#
+# `env.prod` is a local convenience for `pnpm build` and is ignored for the same
+# reason. `env.example` documents the contract and holds no real deployment.
+env.prod
 env.local
 
 # vercel
