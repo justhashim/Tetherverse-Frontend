@@ -19,7 +19,9 @@
  * Base URL of the Tetherverse API, server-side only.
  *
  * This must never be prefixed with NEXT_PUBLIC_: doing so would inline it into the
- * client bundle and publish the service address.
+ * client bundle and publish the service address. The production value comes from
+ * `env.prod` and is inlined into the server bundle at build time; the localhost
+ * default is what `next dev` falls back to when no `.env.local` overrides it.
  */
 const API_URL = (
     process.env.TETHERVERSE_API_URL || 'http://localhost:4000'
