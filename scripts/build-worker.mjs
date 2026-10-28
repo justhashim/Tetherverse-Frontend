@@ -1,6 +1,12 @@
 /**
  * Builds the Cloudflare Worker.
  *
+ * This is what `pnpm build` runs, because the deploy step (`wrangler deploy`)
+ * looks for OpenNext output: a plain `next build` compiles the app but leaves
+ * nothing at `.open-next/worker.js` to upload. The OpenNext build runs
+ * `pnpm build:next` underneath - `open-next.config.ts` names that command so
+ * this file is not called a second time.
+ *
  * The production configuration lives in `env.prod`, which is committed, and the
  * NEXT_PUBLIC_* values in it are inlined into the client bundle at build time.
  * This script reads that file and puts its values in the environment before the
@@ -24,32 +30,65 @@ import { readFileSync } from 'node:fs';
 
 const SOURCE = 'env.prod';
 
-let contents;
+/** Build-time values the bundle is meaningless without. */
+const REQUIRED = [
+    'NEXT_PUBLIC_EXCEL_AUTH_FRONTEND_URL',
+    'NEXT_PUBLIC_LAUNCHER_ORIGIN',
+];
+
+let contents = null;
 try {
     contents = readFileSync(SOURCE, 'utf8');
 } catch (cause) {
-    console.error(`[build-worker] Could not read ${SOURCE}: ${cause.message}`);
+    if (cause.code !== 'ENOENT') {
+        console.error(`[build-worker] Could not read ${SOURCE}: ${cause.message}`);
+        process.exit(1);
+    }
+
+    // CI can supply the values as build environment variables instead of
+    // committing them. Either source is fine; building with neither is not,
+    // because the deployed bundle would ship development defaults.
+    console.warn(`[build-worker] No ${SOURCE}; using variables from the environment.`);
+}
+
+if (contents !== null) {
+    let loaded = 0;
+    for (const line of contents.split('\n')) {
+        const trimmed = line.trim();
+
+        if (!trimmed || trimmed.startsWith('#')) continue;
+
+        const separator = trimmed.indexOf('=');
+        if (separator === -1) continue;
+
+        const name = trimmed.slice(0, separator).trim();
+        if (!name) continue;
+
+        const value = trimmed.slice(separator + 1).trim();
+        process.env[name] = value;
+        loaded += 1;
+    }
+
+    console.log(`[build-worker] Loaded ${loaded} variable(s) from ${SOURCE}.`);
+}
+
+const missing = REQUIRED.filter((name) => !process.env[name]);
+if (missing.length) {
+    console.error(
+        `[build-worker] Missing build-time variable(s): ${missing.join(', ')}.\n` +
+            `Set them in ${SOURCE} or in the build environment.`,
+    );
     process.exit(1);
 }
 
-let loaded = 0;
-for (const line of contents.split('\n')) {
-    const trimmed = line.trim();
-
-    if (!trimmed || trimmed.startsWith('#')) continue;
-
-    const separator = trimmed.indexOf('=');
-    if (separator === -1) continue;
-
-    const name = trimmed.slice(0, separator).trim();
-    if (!name) continue;
-
-    const value = trimmed.slice(separator + 1).trim();
-    process.env[name] = value;
-    loaded += 1;
+if (process.env.TETHERVERSE_API_URL) {
+    // Not fatal - it still runs - but the address becomes part of the bundle,
+    // so it can no longer be changed with `wrangler secret put`.
+    console.warn(
+        '[build-worker] TETHERVERSE_API_URL is set at build time; it will be inlined ' +
+            'into the Worker instead of read as a runtime binding.',
+    );
 }
-
-console.log(`[build-worker] Loaded ${loaded} variable(s) from ${SOURCE}.`);
 
 const child = spawn('opennextjs-cloudflare', ['build'], {
     stdio: 'inherit',

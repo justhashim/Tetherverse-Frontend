@@ -11,5 +11,17 @@ import { defineCloudflareConfig } from "@opennextjs/cloudflare/config";
  * The R2 override the Excel Play launcher uses would add a bucket binding that
  * has to be provisioned, named in three places and paid for, in exchange for
  * caching nothing.
+ *
+ * ── Why buildCommand is set ─────────────────────────────────────────────────
+ *
+ * OpenNext compiles the Next app by running the package's own `build` script.
+ * Here that script is the OpenNext build itself, so the default would call
+ * this process again forever. `build:next` is the plain `next build` that
+ * OpenNext actually wants.
  */
-export default defineCloudflareConfig({});
+const config = {
+    ...defineCloudflareConfig({}),
+    buildCommand: "pnpm run build:next",
+};
+
+export default config;
