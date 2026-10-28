@@ -9,6 +9,22 @@ compatibility_date = "2025-12-15"
 # server-side route handlers rely on.
 compatibility_flags = ["nodejs_compat"]
 
+# ── Runtime configuration ───────────────────────────────────────────────────
+#
+# Where the Tetherverse API lives. The route handlers read it on every request,
+# so changing it takes a deploy of this file (or an edit in the dashboard) and
+# no rebuild of the Next app.
+#
+# Left unset on purpose: the API has not been deployed yet. Until an address is
+# filled in below, the API routes answer 502 and log why. When it exists, on
+# Cloud Run or wherever it lands, uncomment the block:
+#
+# [vars]
+# TETHERVERSE_API_URL = "https://tetherverse-api.example.run.app"
+#
+# `wrangler secret put TETHERVERSE_API_URL` works too, and keeps the value out
+# of this file, at the cost of not being reviewable in a diff.
+
 [assets]
 directory = ".open-next/assets"
 binding = "ASSETS"

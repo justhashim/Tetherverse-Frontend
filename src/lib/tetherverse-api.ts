@@ -19,13 +19,21 @@
  * Base URL of the Tetherverse API, server-side only.
  *
  * This must never be prefixed with NEXT_PUBLIC_: doing so would inline it into the
- * client bundle and publish the service address. The production value comes from
- * `env.prod` and is inlined into the server bundle at build time; the localhost
- * default is what `next dev` falls back to when no `.env.local` overrides it.
+ * client bundle and publish the service address.
+ *
+ * Read from the Worker's own configuration at runtime, not baked in at build time,
+ * so the address can change without rebuilding the app. That matters while the API
+ * is still to be deployed. The localhost default is development only: in production
+ * an unset address is a deployment mistake, and quietly calling localhost would
+ * turn it into a 502 that reads like the API is down.
  */
-const API_URL = (
-    process.env.TETHERVERSE_API_URL || 'http://localhost:4000'
-).replace(/\/+$/, '');
+const CONFIGURED_API_URL = (process.env.TETHERVERSE_API_URL ?? '')
+    .trim()
+    .replace(/\/+$/, '');
+
+const API_URL =
+    CONFIGURED_API_URL ||
+    (process.env.NODE_ENV === 'production' ? '' : 'http://localhost:4000');
 
 /** The API sits one network hop away, so it needs a real timeout. */
 const TIMEOUT_MS = 10_000;
@@ -54,6 +62,16 @@ async function forward(
         body?: string;
     },
 ): Promise<ApiResponse> {
+    if (!API_URL) {
+        // No address, no request. Saying so beats attempting localhost, which
+        // fails as a connection error and blames the wrong service.
+        console.error(
+            '[tetherverse-api] TETHERVERSE_API_URL is not configured. Set it as a ' +
+                'Worker variable (wrangler.toml [vars], or the dashboard).',
+        );
+        throw new ApiUnavailableError(path);
+    }
+
     const headers: Record<string, string> = { 'x-tetherverse-client': CLIENT };
 
     if (init.authorization) {

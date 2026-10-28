@@ -7,17 +7,21 @@
  * `pnpm build:next` underneath - `open-next.config.ts` names that command so
  * this file is not called a second time.
  *
- * The production configuration lives in `env.prod`, which is committed. Its
- * NEXT_PUBLIC_* values are inlined into the client bundle and
- * TETHERVERSE_API_URL into the server bundle, all at build time. This script
- * reads that file and puts its values in the environment before the build
- * starts.
+ * The production configuration lives in `env.prod`, which is committed, and the
+ * NEXT_PUBLIC_* values in it are inlined into the client bundle at build time.
+ * This script reads that file and puts its values in the environment before the
+ * build starts.
  *
  * Environment variables take precedence over every `.env` file Next.js reads,
  * which is what makes this deterministic. Loading the same values through a
  * `.env` file instead would leave the result at the mercy of the order Next.js
  * reads them in, and a developer with a `.env.local` full of development
  * origins would get those origins baked into a deployed Worker.
+ *
+ * `TETHERVERSE_API_URL` is deliberately absent. It is not NEXT_PUBLIC_, and it
+ * is read at runtime from the Worker's configuration so the backend address can
+ * change without a rebuild. Baking it here would make that impossible and hide
+ * the fact that the deployed Worker has no address configured.
  */
 
 import { spawn } from 'node:child_process';
@@ -27,7 +31,6 @@ const SOURCE = 'env.prod';
 
 /** Build-time values the bundle is meaningless without. */
 const REQUIRED = [
-    'TETHERVERSE_API_URL',
     'NEXT_PUBLIC_EXCEL_AUTH_FRONTEND_URL',
     'NEXT_PUBLIC_LAUNCHER_ORIGIN',
 ];
@@ -77,10 +80,32 @@ if (missing.length) {
     process.exit(1);
 }
 
-if (process.env.TETHERVERSE_API_URL) {
-    // Printed because the build log is the only place the deployed backend is
-    // visible: the value is inlined, not read from a dashboard variable.
-    console.log(`[build-worker] Backend: ${process.env.TETHERVERSE_API_URL}`);
+/**
+ * Env files OpenNext copies into the Worker as runtime defaults.
+ *
+ * Worth knowing: `compileEnvFiles` reads these at build time and writes their
+ * values into `.open-next/cloudflare/next-env.mjs`, so a value here is not
+ * merely local. A Worker variable still wins at runtime, but a stale local
+ * address would become the fallback.
+ */
+const ENV_FILES = ['.env', '.env.local', '.env.production', '.env.production.local'];
+
+const bakedFiles = ENV_FILES.filter((file) => {
+    try {
+        return readFileSync(file, 'utf8')
+            .split('\n')
+            .some((line) => line.trim().startsWith('TETHERVERSE_API_URL='));
+    } catch {
+        return false;
+    }
+});
+
+if (bakedFiles.length) {
+    console.warn(
+        `[build-worker] TETHERVERSE_API_URL is set in ${bakedFiles.join(', ')}. OpenNext ` +
+            'copies that into the Worker as a default; remove it there so the address stays ' +
+            'runtime-only.',
+    );
 }
 
 const child = spawn('opennextjs-cloudflare', ['build'], {
