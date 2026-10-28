@@ -12,6 +12,7 @@ import LeaderboardPanel from "@/src/components/leaderboard/LeaderboardPanel";
 import MultiverseBackground from "@/src/components/menu/MultiverseBackground";
 import { useExcelSession } from "@/src/lib/excel-auth-client";
 import { useBridgeAuth } from "@/src/lib/bridge-auth";
+import { installChunkRecovery } from "@/src/lib/chunk-recovery";
 import { startServerRun, type ServerRun } from "@/src/lib/server-run";
 
 type AppState = 'menu' | 'playing' | 'leaderboard';
@@ -27,6 +28,10 @@ type AppState = 'menu' | 'playing' | 'leaderboard';
 export default function Home() {
   const excelSession = useExcelSession();
   const bridge = useBridgeAuth();
+
+  // A tab left open across a deploy is holding chunk names that no longer exist.
+  // This reloads it once instead of leaving the player on an unstyled page.
+  useEffect(() => installChunkRecovery(), []);
 
   // Embedded play authenticates through the launcher; standalone play through the
   // Excel Play accounts. Either one is enough to reach the menu. Both are reshaped

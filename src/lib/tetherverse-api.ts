@@ -101,6 +101,16 @@ async function forward(
 
     const body = await response.json().catch(() => null);
 
+    // A 5xx from here is usually the API's own failure passed straight through,
+    // and the browser shows only the number. Log the endpoint and the status so
+    // a tail is enough to tell "the API is broken" from "this route threw".
+    if (response.status >= 500) {
+        const detail = body === null ? '(no body)' : JSON.stringify(body).slice(0, 300);
+        console.error(
+            `[tetherverse-api] ${init.method} ${path} -> ${response.status} ${detail}`,
+        );
+    }
+
     return { status: response.status, body };
 }
 
