@@ -94,6 +94,10 @@ embed. `TETHERVERSE_API_URL` is deliberately not part of the build: it is read
 per request, so the API can move without rebuilding the app. With it unset the
 API routes answer 502 and log the reason.
 
+It currently points at the Render deployment, which is the only one that exists.
+When the API lands on Cloud Run, the change is that one line in `wrangler.toml` —
+or the same variable in the dashboard, which applies without a deploy at all.
+
 For a local build, `.env.local` or an ignored `env.prod` supplies the same
 values; `env.example` documents each one.
 
