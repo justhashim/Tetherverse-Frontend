@@ -34,7 +34,7 @@ compatibility_flags = ["nodejs_compat"]
 # this file, at the cost of not being reviewable in a diff.
 
 [vars]
-TETHERVERSE_API_URL = "https://tetherverse-backend-46039623481.asia-southeast1.run.app"
+TETHERVERSE_API_URL = "https://tetherverse-backend-310987018955.asia-southeast1.run.app"
 
 # ── Build configuration ─────────────────────────────────────────────────────
 #
