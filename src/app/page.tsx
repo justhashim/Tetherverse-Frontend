@@ -9,13 +9,20 @@ import MainMenu from "@/src/components/menu/MainMenu";
 import GameOverOverlay from "@/src/components/game/GameOverOverlay";
 import type { GameOverData } from "@/src/components/game/GameOverOverlay";
 import LeaderboardPanel from "@/src/components/leaderboard/LeaderboardPanel";
+import RulesPanel from "@/src/components/rules/RulesPanel";
 import MultiverseBackground from "@/src/components/menu/MultiverseBackground";
 import { useExcelSession } from "@/src/lib/excel-auth-client";
 import { useBridgeAuth } from "@/src/lib/bridge-auth";
 import { installChunkRecovery } from "@/src/lib/chunk-recovery";
 import { startServerRun, type ServerRun } from "@/src/lib/server-run";
 
-type AppState = 'menu' | 'playing' | 'leaderboard';
+/*
+   `rules` is a view rather than a boolean on the menu, so the panel owns the
+   screen the way the board does: the menu stays mounted underneath it (the sky
+   behind it is the menu's own, and its entrance animations are already spent),
+   and closing the sheet drops the player back on the screen they left.
+*/
+type AppState = 'menu' | 'playing' | 'leaderboard' | 'rules';
 
 // --- Main Application Root ---
 /**
@@ -343,9 +350,9 @@ export default function Home() {
         <MultiverseBackground />
 
         {/* Main Launcher Interface */}
-        {(currentView === 'menu' || currentView === 'leaderboard' || isMenuMounted) && (
+        {(currentView === 'menu' || currentView === 'leaderboard' || currentView === 'rules' || isMenuMounted) && (
           <div
-            className={`absolute inset-0 transition-opacity duration-700 ${currentView === 'menu' || currentView === 'leaderboard'
+            className={`absolute inset-0 transition-opacity duration-700 ${currentView === 'menu' || currentView === 'leaderboard' || currentView === 'rules'
               ? "z-20 opacity-100 pointer-events-auto"
               : "z-0 opacity-0 pointer-events-none"
               }`}
@@ -353,6 +360,7 @@ export default function Home() {
             <MainMenu
               onPlay={handlePlay}
               onOpenLeaderboard={() => setCurrentView('leaderboard')}
+              onOpenRules={() => setCurrentView('rules')}
               onLogout={handleLogout}
               user={identity}
               bestAltitude={bestAltitude}
@@ -361,6 +369,11 @@ export default function Home() {
               error={runError}
             />
           </div>
+        )}
+
+        {/* The manual. Over the menu, like the board, and never over a live run. */}
+        {currentView === 'rules' && (
+          <RulesPanel onClose={() => setCurrentView('menu')} />
         )}
 
         {/* Global Rankings Telemetry Panel */}

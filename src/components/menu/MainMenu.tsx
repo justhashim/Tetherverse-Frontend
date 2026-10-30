@@ -17,6 +17,8 @@ import { stratumForAltitude } from "@/src/game/config/strata";
 interface MainMenuProps {
     onPlay: () => void;
     onOpenLeaderboard: () => void;
+    /** Opens the manual: the rules a climb is decided by, and how a run is scored. */
+    onOpenRules: () => void;
     onLogout: () => void;
     user: { name: string; image?: string | null };
     bestAltitude?: number;
@@ -77,6 +79,51 @@ function LeaderboardLink({ onClick, className = "" }: { onClick: () => void; cla
 }
 
 /**
+ * A page with lines of writing on it: the manual glyph.
+ *
+ * Outlined rather than filled, unlike the leaderboard's bars, because the two
+ * marks are different kinds of thing: a ranking is a reading of the board, a
+ * manual is a document you open. Drawn on `currentColor` so it tints with its
+ * label, and inline because one mark is not worth a library.
+ */
+function RulesIcon() {
+    return (
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none"
+            aria-hidden="true" focusable="false" className="shrink-0">
+            <rect x="2.75" y="1" width="8.5" height="12" rx="1.4"
+                stroke="currentColor" strokeWidth="1.3" />
+            <path d="M5.25 4.6h3.5M5.25 6.9h3.5M5.25 9.2h2.1"
+                stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+        </svg>
+    );
+}
+
+/**
+ * The way to the rules.
+ *
+ * Placed by the same rule as the board, but not in the same place. On a wide
+ * screen it joins the leaderboard in the middle of the top bar, where there is
+ * room and a pointer; on a phone it sits under the route, in the bottom band,
+ * because the top right corner of a 390px screen is the one place a thumb
+ * cannot go. The two placements are the same control, hidden and shown at the
+ * `sm` breakpoint that separates the two compositions.
+ */
+function RulesLink({ onClick, className = "" }: { onClick: () => void; className?: string }) {
+    return (
+        <button
+            onClick={onClick}
+            type="button"
+            className={`group inline-flex min-h-[44px] items-center gap-2.5 font-mono text-[10px] sm:text-[11px] uppercase tracking-[0.22em] text-zinc-400 hover:text-zinc-100 transition-[color] duration-150 cursor-pointer select-none touch-manipulation ${className}`}
+        >
+            <span className="text-zinc-500 transition-colors duration-150 group-hover:text-zinc-300">
+                <RulesIcon />
+            </span>
+            Rules
+        </button>
+    );
+}
+
+/**
  * One corner of the instrument frame.
  *
  * A short pair of hairlines, inset from the viewport. Four of them turn the
@@ -131,6 +178,7 @@ const ENTER_EASE = [0.16, 1, 0.3, 1] as const;
 export default function MainMenu({
     onPlay,
     onOpenLeaderboard,
+    onOpenRules,
     onLogout,
     user,
     bestAltitude = 0,
@@ -207,8 +255,15 @@ export default function MainMenu({
      * A focused control keeps its own Enter key: if the player has tabbed to
      * the leaderboard and presses Enter, they meant the leaderboard. Anywhere
      * else, Enter means climb.
+     *
+     * Only while the menu is the screen in front. It stays mounted behind the
+     * board and the manual (that sky is these panels' backdrop), so a listener
+     * that fired from there would start a run out of a reference sheet - the
+     * one press this screen owns, spent by a key the player pressed to read.
      */
     useEffect(() => {
+        if (!active) return;
+
         const handleKeyDown = (e: KeyboardEvent) => {
             if (e.key !== 'Enter') return;
             const target = e.target as HTMLElement | null;
@@ -218,7 +273,7 @@ export default function MainMenu({
         };
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [onPlay]);
+    }, [onPlay, active]);
 
     /** The control takes focus the moment the menu is the screen in front. */
     useEffect(() => {
@@ -330,7 +385,7 @@ export default function MainMenu({
                 centring starts where the pointer does. */}
             <div className="relative h-full flex flex-col
                             pl-[calc(1.75rem+env(safe-area-inset-left))] pr-[calc(1.75rem+env(safe-area-inset-right))]
-                            pt-[calc(1.75rem+env(safe-area-inset-top))] pb-[calc(1.75rem+env(safe-area-inset-bottom))]
+                            pt-[calc(1.75rem+env(safe-area-inset-top))] pb-[calc(1.25rem+env(safe-area-inset-bottom))]
                             md:pl-[calc(3rem+env(safe-area-inset-left))] md:pr-[calc(3rem+env(safe-area-inset-right))]
                             md:pt-[calc(2.75rem+env(safe-area-inset-top))] md:pb-[calc(2.75rem+env(safe-area-inset-bottom))]
                             short:pt-[calc(1.25rem+env(safe-area-inset-top))] short:pb-[calc(1.25rem+env(safe-area-inset-bottom))]
@@ -341,7 +396,8 @@ export default function MainMenu({
                     className="flex items-start justify-between gap-4">
                     <ProfileCard user={user} onLogout={onLogout} />
 
-                    <div className="hidden sm:flex items-center">
+                    <div className="hidden sm:flex items-center gap-7">
+                        <RulesLink onClick={onOpenRules} />
                         <LeaderboardLink onClick={onOpenLeaderboard} />
                     </div>
 
@@ -464,7 +520,7 @@ export default function MainMenu({
                         </motion.button>
 
                         <motion.p {...stagger(4)}
-                            className="mt-6 font-mono text-[10px] md:text-[11px] uppercase tracking-[0.24em] text-zinc-300 [text-shadow:0_1px_10px_rgba(2,4,8,0.95)] text-center text-readout short:hidden">
+                            className="mt-4 font-mono text-[10px] md:text-[11px] uppercase tracking-[0.24em] text-zinc-300 [text-shadow:0_1px_10px_rgba(2,4,8,0.95)] text-center text-readout short:hidden">
                             {starting ? "Opening the run" : "Hold to grapple · release to launch"}
                         </motion.p>
 
@@ -503,7 +559,7 @@ export default function MainMenu({
                   screen precisely because that is where a thumb already is.
                 */}
                 <motion.nav {...stagger(5)}
-                    className="mt-8 lg:mt-0 grid grid-cols-4 gap-2 pt-4 short:mt-4 short:pt-1 border-t border-white/[0.07]"
+                    className="mt-2 lg:mt-0 grid grid-cols-4 gap-2 pt-1 short:mt-4 short:pt-1 border-t border-white/[0.07]"
                     aria-label="Verses">
                     {VERSES.map((v, i) => {
                         const active = focusedVerse === i;
@@ -555,34 +611,39 @@ export default function MainMenu({
                 </motion.nav>
 
                 {/*
-                  The sponsor.
+                  The foot of the screen: the credit, and the manual.
 
-                  The bottom edge, under the route, is where a credit belongs:
-                  it is on the screen for the whole session and it is never in
-                  the way of the one control. The mark is white on transparency,
-                  so it sits directly on the sky - a plate behind it would be a
-                  second panel in a composition that has exactly one.
+                  These share a row because the bottom band is the most
+                  expensive 44 pixels on the screen. The disc is `mt-auto` at
+                  the bottom of the middle band, so every pixel added under it
+                  moves the one control in the game up out of a thumb's reach,
+                  and a 44px line of its own under the route is 44 pixels of
+                  reach spent on a document. So the manual shares the credit's
+                  row, on the right where a thumb already rests, and the route,
+                  the credit and the hint above give back the height they can
+                  spare. Measured afterwards at 390x844: the disc's centre sits
+                  at 616px, 73% down the screen, inside the bottom third.
 
-                  Not a link. A credit that navigates is a way to lose a player
-                  mid-menu, and nothing here needs to go anywhere.
-
-                  It is `h-4` rather than a headline: the sponsor is named, not
-                  announced. The label carries the meaning, the mark confirms
-                  it, and neither competes with the name above.
+                  On a wide screen the rules are in the top bar and only the
+                  credit is here, so the row goes back to being centred.
                 */}
                 <motion.div {...stagger(6)}
-                    className="mt-5 short:mt-2 flex items-center justify-center gap-3">
-                    <span className="font-mono text-[9px] uppercase tracking-[0.28em] text-zinc-400
-                                     [text-shadow:0_1px_10px_rgba(2,4,8,0.95)] md:text-[10px]">
-                        Sponsored by
+                    className="mt-1 short:mt-2 flex items-center justify-between gap-3 sm:justify-center">
+                    <span className="flex items-center gap-3">
+                        <span className="font-mono text-[9px] uppercase tracking-[0.28em] text-zinc-400
+                                         [text-shadow:0_1px_10px_rgba(2,4,8,0.95)] md:text-[10px]">
+                            Sponsored by
+                        </span>
+                        <Image
+                            src="/images/studyin-logo.webp"
+                            alt="StudyIn"
+                            width={480}
+                            height={106}
+                            className="h-4 w-auto short:h-3.5 md:h-5"
+                        />
                     </span>
-                    <Image
-                        src="/images/studyin-logo.webp"
-                        alt="StudyIn"
-                        width={480}
-                        height={106}
-                        className="h-4 w-auto short:h-3.5 md:h-5"
-                    />
+
+                    <RulesLink onClick={onOpenRules} className="sm:hidden" />
                 </motion.div>
             </div>
         </div>
