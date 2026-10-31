@@ -124,6 +124,36 @@ function RulesLink({ onClick, className = "" }: { onClick: () => void; className
 }
 
 /**
+ * The exit back to the Excel Play launcher.
+ *
+ * This is a real link rather than a client-side redirect: the launcher is a
+ * separate application, so the browser should own the navigation and users
+ * should be able to open it in a new tab from the context menu. On the narrowest
+ * phones the label collapses to the arrow, but the 44px target and accessible
+ * name remain.
+ */
+function BackToPlayLink() {
+    return (
+        <a
+            href="https://play.excelmec.org"
+            aria-label="Back to Excel Play"
+            className="group inline-flex min-h-[44px] shrink-0 items-center gap-2 rounded-[var(--radius-control)]
+                       font-mono text-[10px] uppercase tracking-[0.18em] text-zinc-400
+                       transition-[color,transform] duration-150 hover:text-zinc-100 active:scale-[0.97]
+                       focus-visible:outline-2! focus-visible:outline-white! focus-visible:outline-offset-2!
+                       touch-manipulation"
+        >
+            <span className="text-zinc-500 transition-colors duration-150 group-hover:text-zinc-300" aria-hidden="true">
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none" focusable="false">
+                    <path d="M8.75 3.25 5.5 7l3.25 3.75M6 7h5.25" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+            </span>
+            <span className="hidden min-[420px]:inline">Back to Play</span>
+        </a>
+    );
+}
+
+/**
  * One corner of the instrument frame.
  *
  * A short pair of hairlines, inset from the viewport. Four of them turn the
@@ -628,7 +658,11 @@ export default function MainMenu({
                   credit is here, so the row goes back to being centred.
                 */}
                 <motion.div {...stagger(6)}
-                    className="mt-1 short:mt-2 flex items-center justify-between gap-3 sm:justify-center">
+                    className="relative mt-1 short:mt-2 flex items-center justify-center gap-3">
+                    <span className="absolute left-0">
+                        <BackToPlayLink />
+                    </span>
+
                     <span className="flex items-center gap-3">
                         <span className="font-mono text-[9px] uppercase tracking-[0.28em] text-zinc-400
                                          [text-shadow:0_1px_10px_rgba(2,4,8,0.95)] md:text-[10px]">
@@ -643,7 +677,7 @@ export default function MainMenu({
                         />
                     </span>
 
-                    <RulesLink onClick={onOpenRules} className="sm:hidden" />
+                    <RulesLink onClick={onOpenRules} className="absolute right-0 sm:hidden" />
                 </motion.div>
             </div>
         </div>
