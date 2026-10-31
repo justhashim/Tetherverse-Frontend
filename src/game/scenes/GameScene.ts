@@ -11,8 +11,16 @@ import { LevelGenerator } from "../levels/LevelGenerator";
 // boundary rather than a set of scattered hooks.
 import { WorldManager, type WorldContext } from "../worlds/WorldManager";
 import { preloadAllSkinArt } from "../worlds/theming";
-import { getCurrentRun } from "../run-session";
-import { readClientAccessToken, type ServerRun } from "@/src/lib/server-run";
+import { getCurrentRun, getCurrentRunOwner } from "../run-session";
+import type { ServerRun } from "@/src/lib/server-run";
+import {
+    fetchServerBest,
+    queuePendingRun,
+    readStoredBest,
+    submitPendingRun,
+    writeStoredBest,
+    type PendingRun,
+} from "@/src/lib/score-store";
 
 /**
  * Vertical speed below which the player counts as settled rather than flying past.
@@ -127,6 +135,9 @@ export class GameScene extends Scene {
     /** The server-issued run this scene is building, if any. */
     private serverRun: ServerRun | null = null;
 
+    /** The account this run was opened for. Finished runs are filed under it. */
+    private runOwner: string | null = null;
+
     private currentAltitudeMeters: number = 0; // Live altitude used to pick the difficulty tier
     private levelSeed: number = 0;
 
@@ -159,21 +170,15 @@ export class GameScene extends Scene {
         // the run this scene belongs to; a null means development or an
         // unscored boot, which falls back to a local seed.
         this.serverRun = getCurrentRun();
+        this.runOwner = getCurrentRunOwner();
         this.runBankedCoins = 0;
 
-        // Keep the local storage check as a fast-loading fallback!
-        // It prevents the score from showing '0m' for half a second while the database loads.
-        try {
-            const saved = localStorage.getItem('maxAltitude');
-            if (saved) {
-                const parsed = parseInt(saved, 10);
-                if (!isNaN(parsed) && parsed > this.maxAltitudeMeters) {
-                    this.maxAltitudeMeters = parsed;
-                }
-            }
-        } catch {
-            // Silently ignore
-        }
+        // The player's best, from the cached placeholder the menu painted with.
+        // It is keyed by account, and it is only a placeholder: the answer is
+        // whichever number `GET /api/score` returns a moment from now, and that
+        // one overwrites this. Nothing in this scene ever *saves* a best - a
+        // climb is saved by the API and read back from it.
+        this.maxAltitudeMeters = this.runOwner ? readStoredBest(this.runOwner) : 0;
 
         // Snapshot before the run can touch it. The cloud fetch below is seeded
         // afterwards so a higher stored best reaches this snapshot too.
@@ -198,53 +203,35 @@ export class GameScene extends Scene {
 
     // Fetch the high score from the database and update the static variable
     private async loadDatabaseHighScore() {
-        try {
-            // This endpoint needs a verified Excel Play identity, so it must carry
-            // the same bearer the score save uses. Without the header the request
-            // is always 401 and the database best never seeds maxAltitudeMeters.
-            const bridgeToken = readClientAccessToken();
+        // The API is the source of truth for a best: this is not a merge with a
+        // local number, it is the number. `fetchServerBest` needs a verified
+        // Excel Play identity and answers null when there is none, so an
+        // anonymous boot keeps the placeholder instead of resetting to zero.
+        const cloud = await fetchServerBest();
+        if (!cloud) return;
 
-            const response = await fetch('/api/score', {
-                headers: bridgeToken ? { Authorization: `Bearer ${bridgeToken}` } : {},
-            });
+        // The cloud is also reporting a pre-run value, and it can land well
+        // after the player has started climbing. Raised unconditionally rather
+        // than only when it beats the live figure: a cloud best that the run has
+        // already overtaken is still the best that existed when the run began,
+        // and dropping it would announce a record the player had in fact already
+        // broken on an earlier visit.
+        this.bestBeforeRun = Math.max(this.bestBeforeRun, cloud.best);
 
-            // Anonymous boot, or the launcher has not delivered a token yet. Abort
-            // quietly: the menu falls back to the locally stored best.
-            if (!response.ok) return;
+        if (cloud.best > this.maxAltitudeMeters) {
+            this.maxAltitudeMeters = cloud.best;
 
-            const data = await response.json();
+            // Refresh the placeholder the menu paints with, so the next boot is
+            // instant and correct. It is still only a cache of this answer.
+            if (this.runOwner) writeStoredBest(this.runOwner, cloud.best);
 
-            // The cloud is also reporting a pre-run value, and it can land well
-            // after the player has started climbing. Raised unconditionally
-            // rather than only when it beats the live figure: a cloud best that
-            // the run has already overtaken is still the best that existed when
-            // the run began, and dropping it would announce a record the player
-            // had in fact already broken on an earlier visit.
-            if (data?.success && typeof data.maxAltitude === 'number') {
-                this.bestBeforeRun = Math.max(this.bestBeforeRun, data.maxAltitude);
-            }
-
-            // If the cloud score is higher than what the local game thinks...
-            if (data.success && data.maxAltitude > this.maxAltitudeMeters) {
-                // 1. Update the static variable
-                this.maxAltitudeMeters = data.maxAltitude;
-
-                // 2. Sync it back to local storage so the next page refresh is instant
-                localStorage.setItem('maxAltitude', data.maxAltitude.toString());
-
-                // 3. Dispatch altitude event to update HUD overlay
-                this.dispatchAltitudeUpdate();
-
-                console.debug('[tetherverse] cloud best', data.maxAltitude);
-            }
-
-            // Coins are seeded outside the altitude branch: a player who has never
-            // scored can still hold coins from earlier runs, so a 0m best must not
-            // hide them.
-            this.bankedCoins = data.coins ?? 0;
-        } catch (error) {
-            console.error("Failed to sync high score from cloud", error);
+            this.dispatchAltitudeUpdate();
         }
+
+        // Coins are seeded outside the altitude branch: a player who has never
+        // scored can still hold coins from earlier runs, so a 0m best must not
+        // hide them.
+        this.bankedCoins = cloud.coins;
     }
 
     preload() {
@@ -501,6 +488,23 @@ export class GameScene extends Scene {
 
         this.dispatchAltitudeUpdate();
 
+        // The HUD is mounted a moment after the scene, so it arrives too late
+        // for the dispatch above and would sit at 0m until the player's first
+        // metre. It asks for a snapshot instead of reading one out of storage:
+        // the best is the API's number, and this scene is holding it.
+        window.addEventListener('tetherverse:altitude-request', this.onAltitudeRequest);
+
+        // Aborting is an ending, not a discard. The run cannot continue - React
+        // tears the canvas down as soon as this returns - so the peak reached
+        // and the coins banked are filed like any other finish, which has to
+        // happen inside this handler because the unmount follows immediately.
+        window.addEventListener('tetherverse:abort-run', this.onAbortRun);
+
+        this.events.once('shutdown', () => {
+            window.removeEventListener('tetherverse:altitude-request', this.onAltitudeRequest);
+            window.removeEventListener('tetherverse:abort-run', this.onAbortRun);
+        });
+
         // The dial, on the console, for development. It is the only way to
         // ask what the mountain is at an altitude without climbing to it, and
         // it is where a themed world reads the mountain it is modulating.
@@ -643,11 +647,10 @@ export class GameScene extends Scene {
 
             if (altitudeMeters > this.maxAltitudeMeters) {
                 this.maxAltitudeMeters = altitudeMeters;
-                try {
-                    localStorage.setItem('maxAltitude', this.maxAltitudeMeters.toString());
-                } catch {
-                    // ignore
-                }
+                // Deliberately not written to storage. This is an unsubmitted
+                // climb; the only thing that may raise a saved best is the API
+                // accepting the run. Caching it here is how a rejected score
+                // came to look saved until the next reload.
                 this.dispatchAltitudeUpdate();
             } else if (altitudeChanged) {
                 this.dispatchAltitudeUpdate();
@@ -1081,25 +1084,38 @@ export class GameScene extends Scene {
         );
     }
 
+    /**
+     * Ends the climb on request (Escape), keeping what it earned.
+     *
+     * It deliberately does not open the game-over screen: the player asked to
+     * leave, not to be told how the run ended. What it does do is file the run,
+     * because a climb that reached 900m and banked four coins is a climb that
+     * happened, and dropping it was the old behaviour - the one place where a
+     * score could vanish without anyone being told.
+     */
+    private readonly onAbortRun = (): void => {
+        if (this.isGameOver) return;
+        this.isGameOver = true;
+        this.recordRun(this.runPeakMeters());
+    };
+
+    /** The HUD asking what the numbers are, because it mounted after create(). */
+    private readonly onAltitudeRequest = (): void => {
+        this.dispatchAltitudeUpdate();
+    };
+
     private handlePlayerFailure() {
         if (this.isGameOver) return;
         this.isGameOver = true;
 
         // Capture the run peak altitude (highest point reached this run) before pausing.
-        const peakPixels = (this.groundReferenceY - this.runLowestY) - 20;
-        const peakMeters = Math.max(0, Math.floor(peakPixels / 10));
+        const peakMeters = this.runPeakMeters();
 
-        // 1. Capture and save this run's score immediately before anything is
-        //    destroyed. `peakMeters` is where THIS climb reached and
-        //    `runBankedCoins` is what it banked - not the personal best and not
-        //    the lifetime coin total, both of which belong to other runs.
-        if (this.serverRun && peakMeters > 0) {
-            void this.submitRunScore(
-                this.serverRun.runId,
-                peakMeters,
-                this.runBankedCoins,
-            );
-        }
+        // 1. File this run before anything is destroyed, and before the first
+        //    byte of the request leaves. `peakMeters` is where THIS climb reached
+        //    and `runBankedCoins` is what it banked - not the personal best and
+        //    not the lifetime coin total, both of which belong to other runs.
+        const recorded = this.recordRun(peakMeters);
 
         // 2. Destroy the previous engine runtime references to safely unbind old event listeners 
         // and eliminate pointer registration leaks
@@ -1130,7 +1146,96 @@ export class GameScene extends Scene {
                     // Reported so the overlay can say what was lost, rather than the
                     // player wondering where the coins they just swept up went.
                     lostCoins: this.pendingCoins,
+                    // The run id, so a save that settles after the overlay is up
+                    // is applied to the screen it belongs to and not to whatever
+                    // run is on screen by then.
+                    runId: this.serverRun?.runId ?? null,
+                    // How the save is going. A climb with no server run is a
+                    // practice climb and says so, rather than showing a spinner
+                    // that will never resolve.
+                    save: recorded ? { status: 'saving' } : { status: 'unscored' },
                 }
+            }));
+        }
+    }
+
+    /** This run's peak altitude in metres, measured from its highest pixel. */
+    private runPeakMeters(): number {
+        const peakPixels = (this.groundReferenceY - this.runLowestY) - 20;
+        return Math.max(0, Math.floor(peakPixels / 10));
+    }
+
+    /**
+     * Writes the finished run into the outbox, then asks the API to score it.
+     *
+     * The order is the point. The queue entry is written synchronously, before
+     * the request exists, so the climb survives a tab that closes, a connection
+     * that drops, or a deploy that unloads the page: the worst case becomes a
+     * save that lands on the next visit rather than a climb that never happened.
+     *
+     * Returns the filed run, or null when this climb had no server run behind it
+     * (development, or a boot that could not open one) and so cannot be scored.
+     */
+    private recordRun(peakMeters: number): PendingRun | null {
+        if (!this.serverRun || peakMeters <= 0) return null;
+
+        const entry: PendingRun = {
+            runId: this.serverRun.runId,
+            // The column the score lands in is a 32-bit integer, so a run that
+            // somehow climbed past its ceiling is filed at the ceiling: a score
+            // that does not fit is a score that was never saved.
+            score: Math.min(peakMeters, GAME_CONSTANTS.WORLD.MAX_ALTITUDE_METERS),
+            coins: Math.floor(this.runBankedCoins),
+            owner: this.runOwner ?? '',
+            at: Date.now(),
+        };
+
+        queuePendingRun({
+            runId: entry.runId,
+            score: entry.score,
+            coins: entry.coins,
+            owner: entry.owner,
+        });
+
+        void this.saveRun(entry);
+        return entry;
+    }
+
+    /**
+     * Tries to deliver one filed run, and tells React how it went.
+     *
+     * Success is the API's, not this scene's: the run leaves the outbox only on
+     * a 2xx or a duplicate, and the best that comes back is the best that
+     * exists. A climb that cannot be delivered stays queued and the overlay
+     * says so, because a player who cannot see that their score did not land
+     * will assume it did.
+     */
+    private async saveRun(entry: PendingRun): Promise<void> {
+        const result = await submitPendingRun(entry);
+
+        if (result.status === 'saved' && typeof result.best === 'number') {
+            this.maxAltitudeMeters = Math.max(this.maxAltitudeMeters, result.best);
+        }
+        if (result.status === 'saved' && typeof result.coins === 'number') {
+            this.bankedCoins = result.coins;
+            this.pendingCoins = 0;
+        }
+
+        if (typeof window !== "undefined") {
+            window.dispatchEvent(new CustomEvent("tetherverse:run-saved", {
+                detail: {
+                    runId: entry.runId,
+                    status: result.status,
+                    message: result.message,
+                    // The numbers forwarded are the ones the API returned, not
+                    // this scene's. `this.maxAltitudeMeters` already contains the
+                    // climb's own live peak, so sending it here would report an
+                    // unconfirmed height as the player's record - the same lie,
+                    // one path over. Undefined when the API said nothing, and the
+                    // listener then keeps what it has.
+                    best: result.best,
+                    coins: result.coins,
+                },
             }));
         }
     }
@@ -1290,82 +1395,5 @@ export class GameScene extends Scene {
         // A fresh seed every run keeps runs rerollable; the same seed always
         // reproduces the exact same level (useful for debugging and balancing).
         return (Date.now() ^ ((Math.random() * 0x100000000) >>> 0)) >>> 0;
-    }
-
-    /**
-     * Finalises the run with the API.
-     *
-     * `peakMeters` is this run's peak altitude and `coins` is this run's banked
-     * haul; both are scoped to the run, never to the player's record. The run
-     * id is what makes the number checkable: the API rejects an id that belongs
-     * to someone else, has already been submitted, has expired, or was
-     * replaced by a newer start.
-     */
-    private async submitRunScore(
-        runId: string,
-        peakMeters: number,
-        coins: number,
-    ) {
-        try {
-            const accessToken = readClientAccessToken();
-
-            const response = await fetch('/api/score', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
-                },
-                body: JSON.stringify({
-                    runId,
-                    // The column the score lands in is a 32-bit integer, so a
-                    // run that somehow climbed past its ceiling is reported at
-                    // the ceiling: a score that does not fit is a score that
-                    // was never saved.
-                    score: Math.min(
-                        Math.floor(peakMeters),
-                        GAME_CONSTANTS.WORLD.MAX_ALTITUDE_METERS
-                    ),
-                    // Coins banked THIS run only. Pending ones were earned on
-                    // the mountain and the run just ended, so they are lost with
-                    // it, and the lifetime total is not this run's haul.
-                    coins: Math.floor(coins),
-                })
-            });
-
-            const data = await response.json().catch(() => null);
-
-            if (!response.ok) {
-                // A duplicate (409) or an expired run (410) is a normal race,
-                // not a game failure: the score was already recorded or the
-                // attempt outlived its window, and either way there is nothing
-                // for the player to retry.
-                if (response.status === 409) {
-                    console.debug('[tetherverse] run already submitted');
-                } else if (response.status === 410) {
-                    console.debug('[tetherverse] run expired before submission');
-                } else {
-                    console.error(
-                        '[tetherverse] score rejected',
-                        response.status,
-                        data,
-                    );
-                }
-                return;
-            }
-
-            if (data?.updated) {
-                console.debug('[tetherverse] new best saved', data.maxAltitude);
-            }
-
-            // The server holds the authoritative total, so adopt it rather than
-            // trusting the local count.
-            if (data?.success && typeof data.coins === 'number') {
-                this.bankedCoins = data.coins;
-                this.pendingCoins = 0;
-            }
-
-        } catch (error) {
-            console.error("Could not reach the database to save score.", error);
-        }
     }
 }

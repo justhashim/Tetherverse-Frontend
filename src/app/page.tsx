@@ -15,6 +15,14 @@ import { useExcelSession } from "@/src/lib/excel-auth-client";
 import { useBridgeAuth } from "@/src/lib/bridge-auth";
 import { installChunkRecovery } from "@/src/lib/chunk-recovery";
 import { startServerRun, type ServerRun } from "@/src/lib/server-run";
+import {
+  clearStoredBest,
+  drainPendingRuns,
+  fetchServerBest,
+  readStoredBest,
+  writeStoredBest,
+  type RunSaveStatus,
+} from "@/src/lib/score-store";
 
 /*
    `rules` is a view rather than a boolean on the menu, so the panel owns the
@@ -78,17 +86,82 @@ export default function Home() {
   // assets are cached by the time the player reaches for the play disc. It used
   // to wait behind the intro video.
   const [isMenuMounted, setIsMenuMounted] = useState(false);
-  const [bestAltitude, setBestAltitude] = useState<number>(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('maxAltitude');
-      return saved ? parseInt(saved, 10) || 0 : 0;
-    }
-    return 0;
-  });
+  /**
+   * The player's best, and the only number the menu's record is built from.
+   *
+   * It starts empty on purpose. The stored value is a *placeholder* keyed by
+   * account, painted for the half second before `GET /api/score` answers, and
+   * the answer always replaces it - including when it is lower. The old version
+   * read `maxAltitude` from localStorage unkeyed and never corrected it, so a
+   * climb the server rejected still stood as a record on that machine, and a
+   * second player on the same browser inherited the first player's best.
+   */
+  const [bestAltitude, setBestAltitude] = useState<number>(0);
+  /**
+   * The last time the API said "no" to a save.
+   *
+   * Kept beside the run error rather than inside the menu, because the player
+   * who has just finished a climb is on the menu when it lands, and the number
+   * they are looking at is the one that did not move.
+   */
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const handleLogin = excelSession.login;
 
   const handleLogout = excelSession.logout;
+
+  /**
+   * The best, from the account that is signed in.
+   *
+   * Three steps, in this order, because the order is what keeps two sources of
+   * truth from disagreeing:
+   *
+   *   1. Paint the cached placeholder for this player, so the menu has a number
+   *      immediately instead of a zero that would look like a reset.
+   *   2. Drain the outbox. A finished run that never reached the API is not
+   *      reflected in `GET /api/score`, so fetching first would report a best
+   *      that is about to be beaten by the player's own unsent climb.
+   *   3. Ask the API, and let its answer win - including when it is lower than
+   *      the cache, which is the only way a save that silently failed stops
+   *      being displayed as if it had landed.
+   */
+  useEffect(() => {
+    if (!identity) return;
+
+    const owner = identity.id;
+    let cancelled = false;
+
+    const sync = async () => {
+      // Painted from the cache first: the menu should not show "no record" for
+      // the half second the API takes to answer a question it already answered
+      // on the last visit. It is replaced below, win or lose.
+      const stored = readStoredBest(owner);
+      if (stored > 0) setBestAltitude(stored);
+
+      const drained = await drainPendingRuns(owner);
+      if (cancelled) return;
+
+      const server = await fetchServerBest();
+      if (cancelled) return;
+
+      if (!server) {
+        // No answer. Keep the placeholder: a flaky read must not tell a player
+        // with a record that they have never climbed.
+        if (drained.best > 0) setBestAltitude(drained.best);
+        return;
+      }
+
+      setBestAltitude(server.best);
+      if (server.best > 0) writeStoredBest(owner, server.best);
+      else clearStoredBest(owner);
+    };
+
+    void sync();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [identity]);
 
   /**
    * Opens a run on the server, or reports why it could not.
@@ -99,8 +172,8 @@ export default function Home() {
    * for the launcher while a start is in flight must not drop a run onto the
    * menu when it lands.
    */
-  const beginRun = useCallback(async (): Promise<ServerRun | null> => {
-    if (startingRunRef.current) return null;
+  const beginRun = useCallback(async (): Promise<{ run: ServerRun | null; blocked: boolean }> => {
+    if (startingRunRef.current) return { run: null, blocked: false };
 
     startingRunRef.current = true;
     const requestId = ++runRequestRef.current;
@@ -108,33 +181,71 @@ export default function Home() {
     setRunError(null);
 
     try {
+      /*
+        The outbox goes first, and an undelivered run blocks the start.
+
+        `POST /api/runs` replaces the run this player already has open, so the
+        moment a new climb begins, any finished climb still waiting in the
+        outbox can never be scored: its run id is no longer the open one. That
+        makes "start a new run" and "lose an unsaved run" the same action unless
+        the queue is emptied first.
+      */
+      const drained = await drainPendingRuns(identity?.id ?? '');
+      if (requestId !== runRequestRef.current) return { run: null, blocked: false };
+
+      if (drained.saved > 0 && drained.best > 0) {
+        setBestAltitude(drained.best);
+        if (identity) writeStoredBest(identity.id, drained.best);
+      }
+
+      if (drained.remaining > 0) {
+        setRunError(
+          drained.message === 'Sign in again to save this climb'
+            ? 'Sign in again to save your last climb, then play.'
+            : 'Your last climb has not been saved yet. Reconnect, then try again.',
+        );
+        return { run: null, blocked: true };
+      }
+
       const nextRun = await startServerRun();
-      if (requestId !== runRequestRef.current) return null;
+      if (requestId !== runRequestRef.current) return { run: null, blocked: false };
       setRun(nextRun);
-      return nextRun;
+      return { run: nextRun, blocked: false };
     } catch (error) {
-      if (requestId !== runRequestRef.current) return null;
+      if (requestId !== runRequestRef.current) return { run: null, blocked: false };
       setRunError(
         error instanceof Error
           ? error.message
           : 'Could not start this climb. Try again.',
       );
-      return null;
+      return { run: null, blocked: false };
     } finally {
       startingRunRef.current = false;
       setIsStartingRun(false);
     }
-  }, []);
+  }, [identity]);
 
   const handlePlay = useCallback(async () => {
-    const nextRun = await beginRun();
+    const { run: nextRun } = await beginRun();
     if (!nextRun) return;
     setCurrentView('playing');
   }, [beginRun]);
 
   const handleRerun = useCallback(async () => {
-    const nextRun = await beginRun();
-    if (!nextRun) return;
+    const { run: nextRun, blocked } = await beginRun();
+    if (!nextRun) {
+      // A rerun can be refused because the last climb is still in the outbox.
+      // That has to be said on the screen the player pressed, not only on the
+      // menu behind it - the overlay is what they are looking at.
+      if (blocked) {
+        setGameOver((prev) =>
+          prev
+            ? { ...prev, save: { status: 'pending', message: 'Last climb still unsaved — reconnect to retry' } }
+            : prev,
+        );
+      }
+      return;
+    }
     setGameOver(null);
     setGameKey((k) => k + 1);
   }, [beginRun]);
@@ -150,30 +261,77 @@ export default function Home() {
     setCurrentView('menu');
   }, []);
 
-  // Sync best altitude from live altitude updates
-  useEffect(() => {
-    const handleAltitude = (e: Event) => {
-      const detail = (e as CustomEvent<{ maxAltitude: number }>).detail;
-      if (detail?.maxAltitude) {
-        setBestAltitude(detail.maxAltitude);
-      }
-    };
-    window.addEventListener('tetherverse:altitude-update', handleAltitude);
-    return () => window.removeEventListener('tetherverse:altitude-update', handleAltitude);
-  }, []);
+  /**
+   * Leaving a run mid-climb.
+   *
+   * The scene files the run before React unmounts it, because the outbox write
+   * is the only part of this that cannot happen afterwards. The climb is not
+   * discarded - it reached what it reached - so this exits to the menu instead
+   * of the game-over screen, and the save's outcome arrives there.
+   */
+  const handleAbort = useCallback(() => {
+    window.dispatchEvent(new CustomEvent('tetherverse:abort-run'));
+    handleExitToLauncher();
+  }, [handleExitToLauncher]);
 
   // Sync game over events
   useEffect(() => {
     const handleGameOver = (e: Event) => {
       const detail = (e as CustomEvent<GameOverData>).detail;
       setGameOver(detail);
-      if (detail?.best) {
-        setBestAltitude(detail.best);
-      }
+      setSaveError(null);
     };
     window.addEventListener('tetherverse:gameover', handleGameOver);
     return () => window.removeEventListener('tetherverse:gameover', handleGameOver);
   }, []);
+
+  /**
+   * The API's verdict on the climb that just ended.
+   *
+   * Three things happen here, and all three are about not lying to the player:
+   * the overlay's save line is updated in place, the menu's best is replaced by
+   * the server's number rather than the scene's, and a refusal becomes a
+   * message they can read instead of a console line they cannot.
+   */
+  useEffect(() => {
+    const handleRunSaved = (e: Event) => {
+      const detail = (e as CustomEvent<{
+        runId: string;
+        status: RunSaveStatus;
+        message?: string;
+        best?: number;
+        coins?: number;
+      }>).detail;
+      if (!detail) return;
+
+      setGameOver((prev) =>
+        prev && prev.runId === detail.runId
+          ? { ...prev, save: { status: detail.status, message: detail.message } }
+          : prev,
+      );
+
+      if (detail.status === 'saved') {
+        setSaveError(null);
+        // The API's answer replaces the cache either way. A saved run always
+        // reports the player's best, so a zero here means this player has no
+        // record - and keeping a stale placeholder would be the exact lie this
+        // change exists to stop.
+        if (typeof detail.best === 'number' && identity) {
+          setBestAltitude(detail.best);
+          if (detail.best > 0) writeStoredBest(identity.id, detail.best);
+          else clearStoredBest(identity.id);
+        }
+        return;
+      }
+
+      if (detail.status === 'rejected' || detail.status === 'pending') {
+        setSaveError(detail.message ?? 'This climb could not be saved.');
+      }
+    };
+
+    window.addEventListener('tetherverse:run-saved', handleRunSaved);
+    return () => window.removeEventListener('tetherverse:run-saved', handleRunSaved);
+  }, [identity]);
 
   // Keyboard controls during Game Over overlay
   useEffect(() => {
@@ -366,7 +524,7 @@ export default function Home() {
               bestAltitude={bestAltitude}
               active={currentView === 'menu'}
               starting={isStartingRun}
-              error={runError}
+              error={runError ?? saveError}
             />
           </div>
         )}
@@ -402,7 +560,7 @@ export default function Home() {
               : "z-10 opacity-0 pointer-events-none"
               }`}
           >
-            <GameCanvas key={gameKey} isActive={currentView === 'playing'} run={run} />
+            <GameCanvas key={gameKey} isActive={currentView === 'playing'} run={run} playerKey={identity.id} />
 
             {/*
               The HUD goes when the run does. It was still mounted behind the
@@ -414,7 +572,7 @@ export default function Home() {
               own, so the exit ran twice.
             */}
             {currentView === 'playing' && !gameOver && (
-              <GameHUD onAbort={handleExitToLauncher} />
+              <GameHUD onAbort={handleAbort} />
             )}
 
             {/*

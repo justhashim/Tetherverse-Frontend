@@ -4,6 +4,7 @@ import { useEffect, useRef } from 'react';
 import { animate, motion, useReducedMotion } from 'framer-motion';
 import CoinIcon from '@/src/components/shared/CoinIcon';
 import { stratumForAltitude } from '@/src/game/config/strata';
+import type { RunSaveState } from '@/src/lib/score-store';
 
 export interface GameOverData {
     altitude: number;
@@ -21,6 +22,16 @@ export interface GameOverData {
     coins: number;
     /** Coins that were on the mountain when the run ended, and are therefore lost. */
     lostCoins: number;
+    /**
+     * The server run this climb belonged to.
+     *
+     * A save settles after this screen is already up, so the answer has to name
+     * the run it is about - otherwise a slow reply from the last climb would
+     * land on the one now on screen.
+     */
+    runId: string | null;
+    /** How the save went, or is going. Updated in place while the overlay is up. */
+    save: RunSaveState;
 }
 
 interface GameOverOverlayProps {
@@ -358,6 +369,44 @@ export default function GameOverOverlay({ data, onRerun, onExit }: GameOverOverl
                         moment. */}
                     <p className="mt-3 flex h-4 items-center justify-center font-mono text-[10px] uppercase tracking-[0.28em] text-rose-400/85">
                         {data.lostCoins > 0 && <span>{data.lostCoins} lost in the fall</span>}
+                    </p>
+
+                    {/*
+                      Whether this climb counted.
+
+                      A score is not saved by the scene that measured it: the API
+                      accepts the runid or it does not, and that answer arrives
+                      after this screen is already up. Staying silent about it
+                      meant a player whose save failed saw a clean game-over
+                      screen, a best that looked updated, and no clue their
+                      climb had not been recorded until days later. So the one
+                      thing this screen now says out loud is the one thing the
+                      player cannot see for themselves.
+
+                      It keeps a fixed height for the same reason as the two
+                      slots above: the answer lands a second in, and a line that
+                      appeared then would move the buttons out from under a thumb
+                      already on the way to them.
+                    */}
+                    <p
+                        className="mt-1 flex min-h-4 items-center justify-center px-2 text-center font-mono text-[10px] uppercase leading-relaxed tracking-[0.22em]"
+                        role="status"
+                        aria-live="polite"
+                    >
+                        {data.save.status === 'saving' && (
+                            <span className="text-zinc-500">Saving to the board</span>
+                        )}
+                        {data.save.status === 'saved' && (
+                            <span className="text-zinc-600">Saved</span>
+                        )}
+                        {data.save.status === 'unscored' && (
+                            <span className="text-zinc-600">Practice climb — not scored</span>
+                        )}
+                        {(data.save.status === 'pending' || data.save.status === 'rejected') && (
+                            <span className="text-rose-400/85">
+                                {data.save.message ?? 'This climb did not count'}
+                            </span>
+                        )}
                     </p>
                 </motion.section>
 

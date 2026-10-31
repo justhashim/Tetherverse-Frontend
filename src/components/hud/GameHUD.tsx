@@ -41,13 +41,12 @@ function getZoneDot(zone: string): string {
 
 export default function GameHUD({ onAbort }: GameHUDProps) {
     const [altitude, setAltitude] = useState<number>(0);
-    const [maxAltitude, setMaxAltitude] = useState<number>(() => {
-        if (typeof window !== 'undefined') {
-            const saved = localStorage.getItem('maxAltitude');
-            return saved ? parseInt(saved, 10) || 0 : 0;
-        }
-        return 0;
-    });
+    // Starts at 0 and is filled by the scene a frame later. It used to be read
+    // out of localStorage, which made the HUD's "best" a second, unsigned copy
+    // of a number the API owns - and the copy was written while the climb was
+    // still happening, so a run the server later rejected still showed up here
+    // as a record.
+    const [maxAltitude, setMaxAltitude] = useState<number>(0);
     const [zone, setZone] = useState<string>('SURFACE');
 
     useEffect(() => {
@@ -69,6 +68,11 @@ export default function GameHUD({ onAbort }: GameHUDProps) {
 
         window.addEventListener('tetherverse:altitude-update', handleAltitudeUpdate);
         window.addEventListener('keydown', handleKeyDown);
+
+        // The scene booted before this HUD existed and only broadcasts on a
+        // change, so ask it what the numbers are rather than waiting for the
+        // player to move.
+        window.dispatchEvent(new CustomEvent('tetherverse:altitude-request'));
 
         return () => {
             window.removeEventListener('tetherverse:altitude-update', handleAltitudeUpdate);
@@ -200,6 +204,13 @@ export default function GameHUD({ onAbort }: GameHUDProps) {
               them once, so they do not need a surface of their own: one line of
               type at the bottom of the sky, with the keys picked out in
               weight.
+
+              Two controls, because there are two. This line used to end with
+              "A / D steer", which advertised a steering axis the simulation
+              does not have: the only input the scene listens for is pointer
+              down and pointer up, so A and D did nothing and the caption was
+              teaching a player to try them mid-swing. A hint that is wrong is
+              worse than a hint that is missing.
             */}
             <footer className="w-full flex justify-center pb-2">
                 <p className="font-mono text-[11px] md:text-xs uppercase tracking-[0.25em] text-zinc-500 text-readout">
@@ -208,10 +219,6 @@ export default function GameHUD({ onAbort }: GameHUDProps) {
                     <span className="sm:hidden"> tap</span>
                     <span className="text-zinc-700 mx-2">·</span>
                     <span className="text-zinc-300 font-bold">Release</span> launch
-                    <span className="hidden sm:inline">
-                        <span className="text-zinc-700 mx-2">·</span>
-                        <span className="text-zinc-300 font-bold">A / D</span> steer
-                    </span>
                 </p>
             </footer>
         </div>

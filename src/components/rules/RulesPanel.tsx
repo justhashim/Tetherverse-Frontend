@@ -168,7 +168,7 @@ const SECTIONS: Section[] = [
             {
                 term: 'Aborting',
                 detail:
-                    'The way out of a run is Escape, and it abandons the climb: nothing banked, nothing scored. It is an exit, not a save.',
+                    'The way out of a run is Escape, and it ends the climb: the peak it reached is submitted with the coins it banked. It is an exit, not a pause — nothing resumes.',
             },
             {
                 term: 'Nothing else',
@@ -223,6 +223,11 @@ const SECTIONS: Section[] = [
                 term: 'One run, one score',
                 detail:
                     'A run can be submitted once, and only what it banked and reached. The number that stands is the one the server accepted, not the one the tab displayed.',
+            },
+            {
+                term: 'An unsaved climb waits',
+                detail:
+                    'If the save cannot reach the server, the run is kept on the device and sent the next time there is a connection. A new climb will not start while one is still waiting, because starting one replaces the run the server is holding.',
             },
             {
                 term: 'Your best lives on the API',

@@ -9,9 +9,11 @@ interface GameProps {
   isActive?: boolean;
   /** The server-issued run this game instance is building. */
   run?: ServerRun | null;
+  /** The account the run was opened for. */
+  playerKey?: string | null;
 }
 
-export default function Game({ isActive = true, run = null }: GameProps) {
+export default function Game({ isActive = true, run = null, playerKey = null }: GameProps) {
   const gameRef = useRef<PhaserGame | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [isReady, setIsReady] = useState(false);
@@ -56,7 +58,7 @@ export default function Game({ isActive = true, run = null }: GameProps) {
         // in create() and never removes it on shutdown, so restarting the
         // scene would stack a second listener on the same physics world; only
         // a fresh game runs create() exactly once per run.
-        setCurrentRun(run);
+        setCurrentRun(run, playerKey);
 
         // The old game was destroyed by the previous effect's cleanup, so the
         // new one is booting from scratch. Say so, rather than showing a live
@@ -99,8 +101,9 @@ export default function Game({ isActive = true, run = null }: GameProps) {
     // The run's identity is what decides which world this game builds. The
     // object is replaced wholesale by the page whenever a run starts, so
     // depending on it recreates the game on every new run and never on an
-    // unrelated re-render.
-  }, [run]);
+    // unrelated re-render. The owner is here for the same reason: a different
+    // account is a different climb to file.
+  }, [run, playerKey]);
 
   return (
     <div className="relative w-screen h-screen overflow-hidden">
