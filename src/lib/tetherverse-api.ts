@@ -180,6 +180,25 @@ export const tetherverseApi = {
         forward('/runs', { method: 'POST', authorization }),
 
     /**
+     * Records one proof-of-play sample for an open run.
+     *
+     * The final score is only accepted when it is anchored to one of these
+     * samples, so a client that opens a run and later posts a number has nothing
+     * to anchor to. `score` is the run's peak so far, not the live altitude.
+     */
+    postCheckpoint: (
+        authorization: string | null,
+        runId: string,
+        score: number,
+        coins = 0,
+    ) =>
+        forward(`/runs/${encodeURIComponent(runId)}/checkpoint`, {
+            method: 'POST',
+            authorization,
+            body: JSON.stringify({ score, coins }),
+        }),
+
+    /**
      * Finalises one run.
      *
      * `runId` is the only id the API will accept for this attempt, so a token

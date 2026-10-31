@@ -12,7 +12,7 @@ import { LevelGenerator } from "../levels/LevelGenerator";
 import { WorldManager, type WorldContext } from "../worlds/WorldManager";
 import { preloadAllSkinArt } from "../worlds/theming";
 import { getCurrentRun, getCurrentRunOwner } from "../run-session";
-import type { ServerRun } from "@/src/lib/server-run";
+import { sendRunCheckpoint, type ServerRun } from "@/src/lib/server-run";
 import {
     fetchServerBest,
     queuePendingRun,
@@ -51,6 +51,17 @@ const BACKGROUND_MARGIN = 1400;
  * sliver of bare page at the edge on alternating frames.
  */
 const BACKGROUND_OVERSCAN = 220;
+
+/**
+ * How often the scene tells the API that a climb is still happening.
+ *
+ * This is proof of play, not a score: the server stores the peak so far and the
+ * coins banked so far, then refuses a final score that is not anchored to one of
+ * these samples. Five seconds is frequent enough that a legitimate final jump is
+ * small, and cheap enough that a run costs a handful of tiny updates rather than
+ * one per frame.
+ */
+const CHECKPOINT_INTERVAL_MS = 5_000;
 
 /**
  * The stretch of mountain the window must always show, in world units.
@@ -141,6 +152,12 @@ export class GameScene extends Scene {
     private currentAltitudeMeters: number = 0; // Live altitude used to pick the difficulty tier
     private levelSeed: number = 0;
 
+    /** Wall-clock of the last checkpoint attempt, in scene milliseconds. */
+    private lastCheckpointAt: number = 0;
+    /** The last checkpoint the server accepted, so samples never go backwards. */
+    private lastCheckpointScore: number = 0;
+    private checkpointInFlight: boolean = false;
+
     private runLowestY: number = 0; // Tracks the highest point reached THIS run to move the death-zone up
 
     /**
@@ -172,6 +189,9 @@ export class GameScene extends Scene {
         this.serverRun = getCurrentRun();
         this.runOwner = getCurrentRunOwner();
         this.runBankedCoins = 0;
+        this.lastCheckpointAt = 0;
+        this.lastCheckpointScore = 0;
+        this.checkpointInFlight = false;
 
         // The player's best, from the cached placeholder the menu painted with.
         // It is keyed by account, and it is only a placeholder: the answer is
@@ -660,6 +680,10 @@ export class GameScene extends Scene {
             if (this.player.y < this.runLowestY) {
                 this.runLowestY = this.player.y;
             }
+
+            // Tell the API the climb is still in progress. The final score is
+            // only accepted when it is anchored to one of these samples.
+            this.maybeCheckpoint();
 
             // =====================================================================
             //  COMPREHENSIVE GAME OVER CHECKS
@@ -1166,6 +1190,39 @@ export class GameScene extends Scene {
     }
 
     /**
+     * Sends a periodic proof-of-play sample while the climb is running.
+     *
+     * The sample is the run's peak, not the live altitude: the server treats
+     * checkpoints as a high-water mark, so a descent must not look like the run
+     * went backwards. Failures are ignored here; the next sample retries, and the
+     * final save sends one more sample before the score.
+     */
+    private maybeCheckpoint(): void {
+        if (!this.serverRun || this.isGameOver || this.checkpointInFlight) return;
+
+        const now = this.time.now;
+        if (now - this.lastCheckpointAt < CHECKPOINT_INTERVAL_MS) return;
+
+        const score = this.runPeakMeters();
+        if (score <= this.lastCheckpointScore) return;
+
+        this.lastCheckpointAt = now;
+        this.checkpointInFlight = true;
+
+        void sendRunCheckpoint(
+            this.serverRun.runId,
+            score,
+            Math.floor(this.runBankedCoins),
+        )
+            .then((accepted) => {
+                if (accepted) this.lastCheckpointScore = score;
+            })
+            .finally(() => {
+                this.checkpointInFlight = false;
+            });
+    }
+
+    /**
      * Writes the finished run into the outbox, then asks the API to score it.
      *
      * The order is the point. The queue entry is written synchronously, before
@@ -1211,6 +1268,11 @@ export class GameScene extends Scene {
      * will assume it did.
      */
     private async saveRun(entry: PendingRun): Promise<void> {
+        // One last sample before the score. The server timestamps it, so the final
+        // number is anchored to a checkpoint that is seconds old rather than
+        // however long ago the last periodic sample happened to land.
+        await sendRunCheckpoint(entry.runId, entry.score, entry.coins);
+
         const result = await submitPendingRun(entry);
 
         if (result.status === 'saved' && typeof result.best === 'number') {

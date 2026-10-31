@@ -49,6 +49,39 @@ function errorMessage(payload: unknown): string | null {
 }
 
 /**
+ * Sends one proof-of-play sample for the run in progress.
+ *
+ * The API anchors the final score to the latest accepted sample, so this is not
+ * optional bookkeeping. It returns false rather than throwing: a dropped
+ * checkpoint is a reason to try again on the next tick, not a reason to end the
+ * climb. The final save sends one more sample before the score, which is what
+ * makes a last-second network blip survivable.
+ */
+export async function sendRunCheckpoint(
+    runId: string,
+    score: number,
+    coins: number,
+): Promise<boolean> {
+    const token = readClientAccessToken();
+    if (!token) return false;
+
+    try {
+        const response = await fetch('/api/checkpoint', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({ runId, score, coins }),
+        });
+
+        return response.ok;
+    } catch {
+        return false;
+    }
+}
+
+/**
  * Opens a new run for the signed-in player.
  *
  * Starting a run is not optional bookkeeping: without one the climb cannot be
