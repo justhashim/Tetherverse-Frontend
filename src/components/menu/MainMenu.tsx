@@ -128,9 +128,9 @@ function RulesLink({ onClick, className = "" }: { onClick: () => void; className
  *
  * This is a real link rather than a client-side redirect: the launcher is a
  * separate application, so the browser should own the navigation and users
- * should be able to open it in a new tab from the context menu. On the narrowest
- * phones the label collapses to the arrow, but the 44px target and accessible
- * name remain.
+ * should be able to open it in a new tab from the context menu. The label stays
+ * visible at every width: this is a platform-level escape hatch, not a hidden
+ * icon whose meaning a player has to guess.
  */
 function BackToPlayLink() {
     return (
@@ -148,7 +148,7 @@ function BackToPlayLink() {
                     <path d="M8.75 3.25 5.5 7l3.25 3.75M6 7h5.25" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
             </span>
-            <span className="hidden min-[420px]:inline">Back to Play</span>
+            <span>Excel Play</span>
         </a>
     );
 }
@@ -423,8 +423,14 @@ export default function MainMenu({
 
                 {/* Top band: who is playing, the way to the board, what they've done. */}
                 <motion.header {...stagger(0)}
-                    className="flex items-start justify-between gap-4">
+                    className="relative flex items-start justify-between gap-4">
                     <ProfileCard user={user} onLogout={onLogout} />
+
+                    {/* The launcher exit sits in the empty centre of the top bar,
+                        where it remains named on even the smallest phone. */}
+                    <span className="absolute left-1/2 top-0 -translate-x-1/2">
+                        <BackToPlayLink />
+                    </span>
 
                     <div className="hidden sm:flex items-center gap-7">
                         <RulesLink onClick={onOpenRules} />
@@ -658,11 +664,7 @@ export default function MainMenu({
                   credit is here, so the row goes back to being centred.
                 */}
                 <motion.div {...stagger(6)}
-                    className="relative mt-1 short:mt-2 flex items-center justify-center gap-3">
-                    <span className="absolute left-0">
-                        <BackToPlayLink />
-                    </span>
-
+                    className="mt-1 short:mt-2 flex items-center justify-center gap-3">
                     <span className="flex items-center gap-3">
                         <span className="font-mono text-[9px] uppercase tracking-[0.28em] text-zinc-400
                                          [text-shadow:0_1px_10px_rgba(2,4,8,0.95)] md:text-[10px]">
